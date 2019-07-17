@@ -1,2 +1,4 @@
 ADD_SUBDIRECTORY(TwoSum)
 ADD_SUBDIRECTORY(AddTwoNumbers)
+ADD_SUBDIRECTORY(LongestSubstringWithoutRepeatingCharacters)
+ADD_SUBDIRECTORY(MedianOfTwoSortedArray)
