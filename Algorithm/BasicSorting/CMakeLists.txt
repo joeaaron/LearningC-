@@ -1,1 +1,2 @@
 ADD_SUBDIRECTORY(01-Selection-Sort)
+ADD_SUBDIRECTORY(02-Insertion-Sort)
