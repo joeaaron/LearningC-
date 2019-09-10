@@ -1,5 +1,7 @@
 #pragma once
 #include <iostream>
+#include <algorithm>
+#include <string>
 #include <ctime>
 #include <cassert>
 
@@ -19,7 +21,14 @@ namespace SortTestHelper{
 		return arr;
 	}
 
-	
+	// 拷贝整型数组a中的所有元素到一个新的数组, 并返回新的数组
+	int *copyIntArray(int a[], int n){
+
+		int *arr = new int[n];
+		//* 在VS中, copy函数被认为是不安全的, 请大家手动写一遍for循环:)
+		copy(a, a + n, arr);
+		return arr;
+	}
 
 	// 打印arr数组的所有内容
 	template<typename T>
