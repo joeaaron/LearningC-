@@ -239,3 +239,14 @@ build/Algorithm/BasicSorting/02-Insertion-Sort/InsertionSort.sln
 build/Algorithm/BasicSorting/02-Insertion-Sort/InsertionSort.vcxproj
 build/Algorithm/BasicSorting/02-Insertion-Sort/InsertionSort.vcxproj.filters
 build/Algorithm/BasicSorting/02-Insertion-Sort/cmake_install.cmake
+build/LeetCode/TwoSum/TwoSum.vcxproj.user
+build/LeetCode/TwoSum/TwoSum.dir/Debug/vc142.pdb
+build/LeetCode/TwoSum/TwoSum.dir/Debug/solution.obj
+build/LeetCode/TwoSum/TwoSum.dir/Debug/TwoSum.log
+build/.vs/LearningC++/v16/ipch/AutoPCH/977da3a8cf5e2987/SOLUTION.ipch
+build/.vs/LearningC++/v16/ipch/AutoPCH/56e1fff5c05e3b65/SOLUTION.ipch
+build/.vs/LearningC++/v16/ipch/AutoPCH/48183b4195e4bc47/MAIN.ipch
+build/.vs/LearningC++/v16/ipch/AutoPCH/23ccd45c513f694/SOLUTION.ipch
+bin/Debug/TwoSum.pdb
+bin/Debug/TwoSum.ilk
+bin/Debug/TwoSum.exe
