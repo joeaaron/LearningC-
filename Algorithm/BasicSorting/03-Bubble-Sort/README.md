@@ -1,5 +1,4 @@
-# 插入排序
+# 冒泡排序
 
-![](J:\code\Z\LearningC-\Algorithm\BasicSorting\imgs\insertion.png)
+![](https://upload-images.jianshu.io/upload_images/7789414-9c7908de122ee2d6.gif?imageMogr2/auto-orient/strip|imageView2/2/w/826/format/webp)
 
-第一个元素不动，后面的数依次和前几个比较，插入在合适的位置。
