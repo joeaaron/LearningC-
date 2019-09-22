@@ -1,6 +1,6 @@
-# 选择排序
+# 归并排序
 
-![](J:\code\Z\LearningC-\Algorithm\BasicSorting\imgs\selection.png)
+![](J:\code\Z\LearningC-\Algorithm\BasicSorting\imgs\merge.png)
 
-找到未排序中最小的，放在未排序的第一个。
+开辟一块新内存，存放源数据，设置i, j, k依次比较移动
 
