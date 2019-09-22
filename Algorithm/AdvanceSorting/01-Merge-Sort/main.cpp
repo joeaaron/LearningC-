@@ -1,90 +1,55 @@
 #include <iostream>
 #include "SortTestHelper.h"
+#include "MergeSort.h"
 #include "InsertionSort.h"
 
 using namespace std;
 
-// 将arr[l...mid]和arr[mid+1...r]两部分进行归并
-template<typename  T>
-void __merge(T arr[], int l, int mid, int r) {
+// 使用自底向上的归并排序算法
+template <typename T>
+void mergeSortBU(T arr[], int n) {
 
-	//* VS不支持动态长度数组, 即不能使用 T aux[r-l+1]的方式申请aux的空间
-	//* 使用VS的同学, 请使用new的方式申请aux空间
-	//* 使用new申请空间, 不要忘了在__merge函数的最后, delete掉申请的空间:)
-	//T aux[r - l + 1];
-	T *aux = new T[r-l+1];
+	// Merge Sort Bottom Up 无优化版本
+//    for( int sz = 1; sz < n ; sz += sz )
+//        for( int i = 0 ; i < n - sz ; i += sz+sz )
+//            // 对 arr[i...i+sz-1] 和 arr[i+sz...i+2*sz-1] 进行归并
+//            __merge(arr, i, i+sz-1, min(i+sz+sz-1,n-1) );
 
-	for (int i = l; i <= r; i++)
-		aux[i - l] = arr[i];
 
-	// 初始化，i指向左半部分的起始索引位置l；j指向右半部分起始索引位置mid+1
-	int i = l, j = mid + 1;
-	for (int k = l; k <= r; k++) {
+	// Merge Sort Bottom Up 优化
+	// 对于小数组, 使用插入排序优化
+	for (int i = 0; i < n; i += 16)
+		insertionSort(arr, i, min(i + 15, n - 1));
 
-		if (i > mid) {  // 如果左半部分元素已经全部处理完毕
-			arr[k] = aux[j - l]; j++;
-		}
-		else if (j > r) {  // 如果右半部分元素已经全部处理完毕
-			arr[k] = aux[i - l]; i++;
-		}
-		else if (aux[i - l] < aux[j - l]) {  // 左半部分所指元素 < 右半部分所指元素
-			arr[k] = aux[i - l]; i++;
-		}
-		else {  // 左半部分所指元素 >= 右半部分所指元素
-			arr[k] = aux[j - l]; j++;
-		}
-	}
+	for (int sz = 16; sz < n; sz += sz)
+		for (int i = 0; i < n - sz; i += sz + sz)
+			// 对于arr[mid] <= arr[mid+1]的情况,不进行merge
+			if (arr[i + sz - 1] > arr[i + sz])
+				__merge(arr, i, i + sz - 1, min(i + sz + sz - 1, n - 1));
 
-	delete[] aux;
+	// Merge Sort BU 也是一个O(nlogn)复杂度的算法，虽然只使用两重for循环
+	// 所以，Merge Sort BU也可以在1秒之内轻松处理100万数量级的数据
+	// 注意：不要轻易根据循环层数来判断算法的复杂度，Merge Sort BU就是一个反例
+	// 关于这部分陷阱，推荐看我的《玩转算法面试》课程，第二章：《面试中的复杂度分析》：）
+
 }
 
-// 递归使用归并排序,对arr[l...r]的范围进行排序
-template<typename T>
-void __mergeSort(T arr[], int l, int r) {
 
-	if (l >= r)
-		return;
-
-	int mid = (l + r) / 2;
-	__mergeSort(arr, l, mid);
-	__mergeSort(arr, mid + 1, r);
-	__merge(arr, l, mid, r);
-}
-
-template<typename T>
-void mergeSort(T arr[], int n) {
-
-	__mergeSort(arr, 0, n - 1);
-}
-
-int main()
-{
-	// 测试模板函数，传入整型数组
-	int a[10] = { 3, 9, 18, 7, 34, 5, 14, 2, 66, 1 };
-	mergeSort(a, 10);
-	for (int i = 0; i < 10; i++)
-		cout << a[i] << " ";
-	cout << endl;
- }
-
-/*
-// 比较InsertionSort和MergeSort两种排序算法的性能效率
-// 整体而言, MergeSort的性能最优, 对于近乎有序的数组的特殊情况, 见测试2的详细注释
+// 比较Merge Sort和Merge Sort Bottom Up两种排序算法的性能效率
+// 整体而言, 两种算法的效率是差不多的。但是如果进行仔细测试, 自底向上的归并排序会略胜一筹。
+// 更详细的测试, 可以参考课程的这个问题: http://coding.imooc.com/learn/questiondetail/3208.html
+// 本章节的代码仓也会给出更详细的测试代码
 int main() {
 
-	// Merge Sort是我们学习的第一个O(nlogn)复杂度的算法
-	// 可以在1秒之内轻松处理100万数量级的数据
-	// 注意：不要轻易尝试使用SelectionSort, InsertionSort或者BubbleSort处理100万级的数据
-	// 否则，你就见识了O(n^2)的算法和O(nlogn)算法的本质差异：）
-	int n = 50000;
+	int n = 1000000;
 
 	// 测试1 一般性测试
 	cout << "Test for random array, size = " << n << ", random range [0, " << n << "]" << endl;
 	int* arr1 = SortTestHelper::generateRandomArray(n, 0, n);
 	int* arr2 = SortTestHelper::copyIntArray(arr1, n);
 
-	SortTestHelper::testSort("Insertion Sort", insertionSort, arr1, n);
-	SortTestHelper::testSort("Merge Sort", mergeSort, arr2, n);
+	SortTestHelper::testSort("Merge Sort", mergeSort, arr1, n);
+	SortTestHelper::testSort("Merge Sort Bottom Up", mergeSortBU, arr2, n);
 
 	delete[] arr1;
 	delete[] arr2;
@@ -93,23 +58,16 @@ int main() {
 
 
 	// 测试2 测试近乎有序的数组
-	// 对于近乎有序的数组, 数组越有序, InsertionSort的时间性能越趋近于O(n)
-	// 所以可以尝试, 当swapTimes比较大时, MergeSort更快
-	// 但是当swapTimes小到一定程度, InsertionSort变得比MergeSort快
-	int swapTimes = 10;
-	assert(swapTimes >= 0);
-
+	int swapTimes = 100;
 	cout << "Test for nearly ordered array, size = " << n << ", swap time = " << swapTimes << endl;
 	arr1 = SortTestHelper::generateNearlyOrderedArray(n, swapTimes);
 	arr2 = SortTestHelper::copyIntArray(arr1, n);
 
-	SortTestHelper::testSort("Insertion Sort", insertionSort, arr1, n);
-	SortTestHelper::testSort("Merge Sort", mergeSort, arr2, n);
+	SortTestHelper::testSort("Merge Sort", mergeSort, arr1, n);
+	SortTestHelper::testSort("Merge Sort Bottom Up", mergeSortBU, arr2, n);
 
 	delete[] arr1;
 	delete[] arr2;
 
 	return 0;
 }
-*/
-
