@@ -426,3 +426,13 @@ bin/Debug/Heapify.exe
 build/Algorithm/Heap/02-Heapify/Heapify.dir/Debug/Heapify.tlog/link.write.1.tlog
 build/Algorithm/Heap/02-Heapify/Heapify.dir/Debug/Heapify.tlog/link.read.1.tlog
 build/Algorithm/Heap/02-Heapify/Heapify.dir/Debug/Heapify.tlog/link.command.1.tlog
+build/Algorithm/Heap/03-Heap-Sort/cmake_install.cmake
+build/Algorithm/Heap/03-Heap-Sort/HeapSort.vcxproj.filters
+build/Algorithm/Heap/03-Heap-Sort/HeapSort.vcxproj
+build/Algorithm/Heap/03-Heap-Sort/HeapSort.sln
+build/Algorithm/Heap/03-Heap-Sort/CMakeFiles/generate.stamp.depend
+build/Algorithm/Heap/03-Heap-Sort/CMakeFiles/generate.stamp
+build/Algorithm/Heap/03-Heap-Sort/ALL_BUILD.vcxproj.filters
+build/Algorithm/Heap/03-Heap-Sort/ALL_BUILD.vcxproj
+build/.vs/LearningC++/v16/ipch/AutoPCH/c22e572e01a58da/HEAPSORT.ipch
+build/.vs/LearningC++/v16/ipch/AutoPCH/a81dd565269160bc/MAIN.ipch
