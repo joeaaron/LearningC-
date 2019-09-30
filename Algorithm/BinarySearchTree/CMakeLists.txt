@@ -1,1 +1,2 @@
 ADD_SUBDIRECTORY(01-Binary-Search)
+ADD_SUBDIRECTORY(02-Binary-Search-Basic)
