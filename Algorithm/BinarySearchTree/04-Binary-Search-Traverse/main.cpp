@@ -67,6 +67,21 @@ public:
 	void postOrder() {
 		postOrder(root);
 	}
+
+	//二分搜索树的层序遍历
+	void levelOrder() {
+		queue<Node*> q;
+		q.push(root);
+		while (!q.empty()) {
+			Node* node = q.front();
+			q.pop();
+			cout << node->key << endl;
+			if (node->left)
+				q.push(node->left);
+			if (node->right)
+				q.push(node->right);
+		}
+	}
 private:
 	Node* insert(Node* node, Key key, Value value) {
 		if (node == NULL) {
@@ -186,6 +201,11 @@ int main() {
 	// 测试二分搜索树的后序遍历 postOrder
 	cout << "postOrder: " << endl;
 	bst.postOrder();
+	cout << endl;
+
+	// 测试二分搜索树的层序遍历 levelOrder
+	cout << "levelOrder: " << endl;
+	bst.levelOrder();
 	cout << endl;
 
 	return 0;
