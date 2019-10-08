@@ -1,3 +1,7 @@
+#include <iostream>
+
+using namespace std;
+
 template<typename Key, typename Value>
 class BST {
 private:
