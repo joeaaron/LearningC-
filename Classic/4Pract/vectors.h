@@ -142,6 +142,4 @@ public:
 		this->p = new T[this->capacity];
 		memcpy(this->p, v.p, this->size*sizeof(T));
 	}
-
-
 };
