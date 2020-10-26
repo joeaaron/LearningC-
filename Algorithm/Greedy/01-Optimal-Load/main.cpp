@@ -20,24 +20,25 @@ int main()
 	{
 		cin >> w[i];		// 输入每个物品重量
 	}
-	sort(w, w + n);			// 按古董重量升序排序
-	//double temp = 0.0;
-	//int ans = 0;			// tmp为已装载到船上的古董重量，ans为已装载的古董个数
-	int tmp = 0, ans = n;
+	sort(w, w + n);					// 按古董重量升序排序
+	//double tmp = 0.0;
+	//int ans = 0;					// tmp为已装载到船上的古董重量，ans为已装载的古董个数
+	//if (tmp <= c)
+	//	ans++;
+	//else
+	//	break;
+
+	double tmp = 0, ans = n;
 	for (int i = 0; i < n;i++)
 	{
 		tmp += w[i];
-		if (tmp>=c)
+		if (tmp >= c)
 		{
 			if (tmp == c)
 				ans = i + 1;
 			else ans = i;
 			break;
 		}
-		/*if (tmp <= c)
-			ans++;
-		else
-			break;*/
 	}
 
 	cout << "能装入的古董最大数量为Ans=";
