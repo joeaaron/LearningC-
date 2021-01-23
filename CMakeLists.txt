@@ -1,5 +1,5 @@
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
-cmake_minimum_required (VERSION 2.6) 
+cmake_minimum_required (VERSION 2.8) 
 project (LearningC++)
 
 SET(EXECUTABLE_OUTPUT_PATH "${CMAKE_SOURCE_DIR}/bin/")
@@ -16,3 +16,7 @@ add_subdirectory(LeetCode)
 add_subdirectory(Classic)
 add_subdirectory(Algorithm)
 add_subdirectory(Primer)
+add_subdirectory(Booster)
+add_subdirectory(Basic)
+add_subdirectory(Practice)
+
