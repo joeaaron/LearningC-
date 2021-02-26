@@ -3,5 +3,9 @@ ADD_SUBDIRECTORY(AdvanceSorting)
 ADD_SUBDIRECTORY(Heap)
 ADD_SUBDIRECTORY(BinarySearchTree)
 ADD_SUBDIRECTORY(UnionFind)
+<<<<<<< HEAD
+ADD_SUBDIRECTORY(GraphBasics)
+=======
 ADD_SUBDIRECTORY(Greedy)
 ADD_SUBDIRECTORY(Divide-and-Conquer)
+>>>>>>> abaa1e63d13eed58c48bb66fe398a70d090601f1
