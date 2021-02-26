@@ -15,6 +15,8 @@ include_directories("${CMAKE_SOURCE_DIR}/include/")
 add_subdirectory(LeetCode)
 add_subdirectory(Classic)
 add_subdirectory(Algorithm)
+add_subdirectory(Primer)
 add_subdirectory(Booster)
 add_subdirectory(Basic)
 add_subdirectory(Practice)
+
