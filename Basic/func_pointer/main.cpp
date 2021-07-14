@@ -21,22 +21,19 @@ public:
 		code_7
 	};
 
+	void	Handler1(int nCode){ printf("code = %d\n", nCode); }
+	void	Handler2(int nCode){ printf("code = %d\n", nCode); }
+	void	Handler3(int nCode){ printf("code = %d\n", nCode); }
+	void	Handler4(int nCode){ printf("code = %d\n", nCode); }
+	void	Handlern(int nCode){ printf("code = %d\n", nCode); }
+
 	// 初始化处理编码与处理函数的对应关系
 	void InitHandlerMap();
 
 	void Process(int nCode);
 
-
-	void			Handler1(int nCode){ printf("code = %d\n", nCode); }
-	void			Handler2(int nCode){ printf("code = %d\n", nCode); }
-	void			Handler3(int nCode){ printf("code = %d\n", nCode); }
-	void			Handler4(int nCode){ printf("code = %d\n", nCode); }
-	void			Handlern(int nCode){ printf("code = %d\n", nCode); }
-
-
 private:
 	std::map<int, pFun>			m_pHandlerMap;
-
 };
 
 
