@@ -1,21 +1,19 @@
 #include <string>
 #include <iostream>
 
-using namespace std;
-
 class Solution {
 public:
-	int lengthOfLastWord(string s)
+	int LengthOfLastWord(std::string strWord)
 	{
-		int nIdx = s.size() - 1;
+		int nIdx = strWord.size() - 1;
 
-		while (s[nIdx] == ' ')
+		while (strWord[nIdx] == ' ')
 		{
 			nIdx--;
 		}
 
 		int nWordLength = 0;
-		while (nIdx >= 0 && s[nIdx] != ' ')
+		while (nIdx >= 0 && strWord[nIdx] != ' ')
 		{
 			nWordLength++;
 			nIdx--;
@@ -27,12 +25,12 @@ public:
 
 int main()
 {
-	string str = "hello aw";
+	std::string str = "hello nowcoder ";
 
 	Solution solu;
-	int nLength = solu.lengthOfLastWord(str);
+	int nLength = solu.LengthOfLastWord(str);
 	
-	cout << "last word length = " << nLength << endl;
+	std::cout << "last word length = " << nLength << std::endl;
 	
 	return 0;
 }
