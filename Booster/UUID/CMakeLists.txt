@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.9)
 project(BoostUuid)
 set(CMAKE_CXX_STANDARD 11)
-set(BOOST_ROOT D:/software/boost_1_73_0/boost_1_73_0)
+set(BOOST_ROOT D:/software/boost_1_73_0)
 
 set(SOURCE_FILES main.cpp ZvUUID.h)
 find_package(Boost 1.73.0)

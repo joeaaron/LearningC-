@@ -1,1 +1,2 @@
 ADD_SUBDIRECTORY(BasicString)
+ADD_SUBDIRECTORY(StringCompare)
