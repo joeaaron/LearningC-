@@ -12,7 +12,7 @@ int main(int argc, char** argv)
 	// -------------------------º”‘ÿµ„‘∆-------------------------------
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
 
-	if (pcl::io::loadPCDFile("Z:\\CodeProj\\JA\\LearningC++\\resource\\bunny.pcd", *cloud) == -1)
+	if (pcl::io::loadPCDFile("E:\\Repository\\Github\\LearningC-\\resource\\bunny.pcd", *cloud) == -1)
 	{
 		cerr << "can't read file " << endl;
 		return -1;
@@ -34,7 +34,7 @@ int main(int argc, char** argv)
 	while (!viewer->wasStopped())
 	{
 		viewer->spinOnce(100);
-		boost::this_thread::sleep(boost::posix_time::microseconds(100000));
+		//boost::this_thread::sleep(boost::posix_time::microseconds(100000));
 	}
 
 	return 0;

@@ -12,7 +12,7 @@ main(int argc, char** argv)
 	// Load input file into a PointCloud<T> with an appropriate type
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
 	pcl::PCLPointCloud2 cloud_blob;
-	pcl::io::loadPCDFile(".\\table_scene_lms400.pcd", cloud_blob);
+	pcl::io::loadPCDFile("table_scene_lms400.pcd", cloud_blob);
 	pcl::fromPCLPointCloud2(cloud_blob, *cloud);
 	//* the data should be available in cloud
 
@@ -78,7 +78,7 @@ main(int argc, char** argv)
 	while (!viewer->wasStopped())
 	{
 		viewer->spinOnce(100);
-		boost::this_thread::sleep(boost::posix_time::microseconds(100000));
+		//boost::this_thread::sleep(boost::posix_time::microseconds(100000));
 	}
 	// Finish
 	return (0);
