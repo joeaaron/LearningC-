@@ -21,7 +21,7 @@ typedef struct PCURVATURE {
 int main()
 {
 	//读取点云数据
-	if (pcl::io::loadPCDFile("E:/Repository/Github/LearningC-/resource/bunny.pcd", *cloud))
+	if (pcl::io::loadPCDFile("bunny.pcd", *cloud))
 	{
 		std::cerr << "ERROR: Cannot open file " << std::endl;
 		return 0;
