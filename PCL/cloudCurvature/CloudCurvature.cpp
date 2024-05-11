@@ -3,6 +3,7 @@
 #include <pcl/features/principal_curvatures.h>
 #include <ctime>//c++程序计时头文件
 #include <pcl/visualization/cloud_viewer.h>
+#include <pcl/io/ply_io.h>
 
 using namespace std;
 clock_t start_time, end_time;
@@ -26,6 +27,8 @@ int main()
 		std::cerr << "ERROR: Cannot open file " << std::endl;
 		return 0;
 	}
+
+	//pcl::io::savePLYFile("test111.ply", *cloud);
 
 	start_time = clock();//程序开始计时
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_MaxCurvature(new pcl::PointCloud<pcl::PointXYZ>);

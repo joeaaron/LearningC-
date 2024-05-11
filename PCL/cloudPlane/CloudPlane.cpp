@@ -1,0 +1,103 @@
+#include <iostream>
+#include <pcl/io/pcd_io.h>
+#include <pcl/io/ply_io.h>
+#include <pcl/point_types.h>
+#include <pcl/point_cloud.h>
+#include <pcl/sample_consensus/ransac.h>
+#include <pcl/sample_consensus/sac_model_plane.h>
+#include <pcl/visualization/pcl_visualizer.h>
+#include <boost/thread/thread.hpp>
+
+using namespace std;
+
+int
+main(int argc, char** argv)
+{
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
+
+	if (pcl::io::loadPCDFile<pcl::PointXYZ>("sac_plane_test.pcd", *cloud) == -1)
+	{
+		PCL_ERROR("点云读取失败 \n");
+		return (-1);
+	}
+
+	//if (pcl::io::loadPLYFile<pcl::PointXYZ>("Scan_0511_1713.ply", *cloud) == -1)
+	//{
+	//	PCL_ERROR("点云读取失败 \n");
+	//	return (-1);
+	//}
+
+    //------------------------------------------RANSAC框架--------------------------------------------------------   
+    pcl::SampleConsensusModelPlane<pcl::PointXYZ>::Ptr model_plane(new pcl::SampleConsensusModelPlane<pcl::PointXYZ>(cloud));
+
+    pcl::RandomSampleConsensus<pcl::PointXYZ> ransac(model_plane);//定义RANSAC算法模型
+    ransac.setDistanceThreshold(0.01);//设定距离阈值
+    ransac.setMaxIterations(500);     //设置最大迭代次数
+    ransac.setProbability(0.99);      //设置从离群值中选择至少一个样本的期望概率
+    ransac.computeModel();            //拟合平面
+    vector<int> inliers;              //用于存放内点索引的vector
+    ransac.getInliers(inliers);       //获取内点索引
+
+    Eigen::VectorXf coeff;
+    ransac.getModelCoefficients(coeff);  //获取拟合平面参数，coeff分别按顺序保存a,b,c,d
+
+    cout << "平面模型系数coeff(a,b,c,d): " << coeff[0] << " \t" << coeff[1] << "\t " << coeff[2] << "\t " << coeff[3] << endl;
+    /*
+     //-------------------平面法向量定向，与（1，1，1）同向，并输出平面与原点的距离D---------------------------
+     double a, b, c, d, A, B, C, D;//a,b,c为拟合平面的单位法向量，A,B,C为重定向后的法向量
+     a = coeff[0], b = coeff[1], c = coeff[2], d = coeff[3];
+
+     if (a + b + c > 0) {
+         A = a;
+         B = b;
+         C = c;
+         D = abs(d);
+     }
+     else {
+         A = -a;
+         B = -b;
+         C = -c;
+         D = abs(d);
+     }
+     cout << "" << A << ",\t" << "" << B << ",\t" << "" << C << ",\t" << "" << D << ",\t" << endl;
+     */
+
+     //--------------------------------根据内点索引提取拟合的平面点云-----------------------------------
+    pcl::PointCloud<pcl::PointXYZ>::Ptr sac_plane(new pcl::PointCloud<pcl::PointXYZ>);
+    pcl::copyPointCloud<pcl::PointXYZ>(*cloud, inliers, *sac_plane);
+    // pcl::io::savePCDFileASCII("1.11.pcd", *final);
+    //-------------------------------------------可视化-------------------------------------------------
+    boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer(new pcl::visualization::PCLVisualizer("cloud show"));
+    int v1 = 0;
+    int v2 = 1;
+
+    viewer->createViewPort(0, 0, 0.5, 1, v1);
+    viewer->createViewPort(0.5, 0, 1, 1, v2);
+    viewer->setBackgroundColor(0, 0, 0, v1);
+    viewer->setBackgroundColor(0, 0, 0, v2);
+
+    pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> color(cloud, 0, 255, 0);
+    pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> after_sac(sac_plane, 0, 0, 255);
+
+    viewer->addPointCloud(cloud, color, "cloud", v1);
+    viewer->addPointCloud(sac_plane, after_sac, "plane cloud", v2);
+    /*
+    // 显示拟合出来的平面
+    pcl::ModelCoefficients plane;
+    plane.values.push_back(coeff[0]);
+    plane.values.push_back(coeff[1]);
+    plane.values.push_back(coeff[2]);
+    plane.values.push_back(coeff[3]);
+
+    viewer->addPlane(plane, "plane",v2);
+    */
+
+    while (!viewer->wasStopped())
+    {
+        viewer->spinOnce(100);
+        //boost::this_thread::sleep(boost::posix_time::microseconds(10000));
+    }
+
+    return 0;
+}
+
