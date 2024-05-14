@@ -9,8 +9,10 @@
 #include <boost/thread/thread.hpp>
 #include <pcl/common/eigen.h>
 #include <pcl/common/centroid.h>
+#include <chrono>
 
 using namespace std;
+#define ENABLE_DISPLAY 0  // 定义一个宏，用于控制显示状态
 
 void RANSCAPlaneFit(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
 {
@@ -50,40 +52,43 @@ void RANSCAPlaneFit(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
      */
 
      //--------------------------------根据内点索引提取拟合的平面点云-----------------------------------
-    pcl::PointCloud<pcl::PointXYZ>::Ptr sac_plane(new pcl::PointCloud<pcl::PointXYZ>);
-    pcl::copyPointCloud<pcl::PointXYZ>(*cloud, inliers, *sac_plane);
-    // pcl::io::savePCDFileASCII("1.11.pcd", *final);
-    //-------------------------------------------可视化-------------------------------------------------
-    boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer(new pcl::visualization::PCLVisualizer("cloud show"));
-    int v1 = 0;
-    int v2 = 1;
+#if ENABLE_DISPLAY
+	pcl::PointCloud<pcl::PointXYZ>::Ptr sac_plane(new pcl::PointCloud<pcl::PointXYZ>);
+	pcl::copyPointCloud<pcl::PointXYZ>(*cloud, inliers, *sac_plane);
+	// pcl::io::savePCDFileASCII("1.11.pcd", *final);
+	//-------------------------------------------可视化-------------------------------------------------
+	boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer(new pcl::visualization::PCLVisualizer("cloud show"));
+	int v1 = 0;
+	int v2 = 1;
 
-    viewer->createViewPort(0, 0, 0.5, 1, v1);
-    viewer->createViewPort(0.5, 0, 1, 1, v2);
-    viewer->setBackgroundColor(0, 0, 0, v1);
-    viewer->setBackgroundColor(0, 0, 0, v2);
+	viewer->createViewPort(0, 0, 0.5, 1, v1);
+	viewer->createViewPort(0.5, 0, 1, 1, v2);
+	viewer->setBackgroundColor(0, 0, 0, v1);
+	viewer->setBackgroundColor(0, 0, 0, v2);
 
-    pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> color(cloud, 0, 255, 0);
-    pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> after_sac(sac_plane, 0, 0, 255);
+	pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> color(cloud, 0, 255, 0);
+	pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> after_sac(sac_plane, 0, 0, 255);
 
-    viewer->addPointCloud(cloud, color, "cloud", v1);
-    //viewer->addPointCloud(sac_plane, after_sac, "plane cloud", v2);
+	viewer->addPointCloud(cloud, color, "cloud", v1);
+	//viewer->addPointCloud(sac_plane, after_sac, "plane cloud", v2);
 
-    // 显示拟合出来的平面
-    pcl::ModelCoefficients plane;
-    plane.values.push_back(coeff[0]);
-    plane.values.push_back(coeff[1]);
-    plane.values.push_back(coeff[2]);
-    plane.values.push_back(coeff[3]);
+	// 显示拟合出来的平面
+	pcl::ModelCoefficients plane;
+	plane.values.push_back(coeff[0]);
+	plane.values.push_back(coeff[1]);
+	plane.values.push_back(coeff[2]);
+	plane.values.push_back(coeff[3]);
 
-    viewer->addPlane(plane, "cloud", v2);
+	viewer->addPlane(plane, "cloud", v2);
 
 
-    while (!viewer->wasStopped())
-    {
-        viewer->spinOnce(100);
-        //boost::this_thread::sleep(boost::posix_time::microseconds(10000));
-    }
+	while (!viewer->wasStopped())
+	{
+		viewer->spinOnce(100);
+		//boost::this_thread::sleep(boost::posix_time::microseconds(10000));
+	}
+#endif
+
 }
 
 void LeastSquareFit(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
@@ -113,6 +118,7 @@ void LeastSquareFit(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
 		<< "C=" << normal[2] << "\n"
 		<< "D=" << D << "\n" << endl;
 
+#if ENABLE_DISPLAY
 	// 显示拟合出来的平面
 	pcl::ModelCoefficients plane;
 	plane.values.push_back(normal[0]);
@@ -134,6 +140,8 @@ void LeastSquareFit(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
 		viewer->spinOnce(100);
 		//boost::this_thread::sleep(boost::posix_time::microseconds(10000));
 	}
+#endif
+
 }
 
 int
@@ -141,7 +149,7 @@ main(int argc, char** argv)
 {
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
 
-	if (pcl::io::loadPCDFile<pcl::PointXYZ>("sac_plane_test.pcd", *cloud) == -1)
+	if (pcl::io::loadPCDFile<pcl::PointXYZ>("Scan_0511_1713.pcd", *cloud) == -1)		// sac_plane_test.pcd | Scan_0511_1713.pcd
 	{
 		PCL_ERROR("点云读取失败 \n");
 		return (-1);
@@ -152,8 +160,17 @@ main(int argc, char** argv)
 	//	PCL_ERROR("点云读取失败 \n");
 	//	return (-1);
 	//}
-    //RANSCAPlaneFit(cloud);
+    auto startOp1 = std::chrono::high_resolution_clock::now();
+    RANSCAPlaneFit(cloud);
+    auto endOp1 = std::chrono::high_resolution_clock::now();
+	std::chrono::duration<double> elapsedOp1 = endOp1 - startOp1;
+	std::cout << "Elapsed time for operation 1: " << elapsedOp1.count() << " seconds" << std::endl;
+
+    auto startOp2 = std::chrono::high_resolution_clock::now();
     LeastSquareFit(cloud);
+    auto endOp2 = std::chrono::high_resolution_clock::now();
+	std::chrono::duration<double> elapsedOp2 = endOp2 - startOp2;
+	std::cout << "Elapsed time for operation 2: " << elapsedOp2.count() << " seconds" << std::endl;
 
     return 0;
 }
