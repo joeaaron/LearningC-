@@ -23,6 +23,7 @@
 #include <pcl/keypoints/uniform_sampling.h>
 #include <pcl/console/time.h> 
 #include <pcl/surface/concave_hull.h>  
+#include <pcl/features/normal_3d_omp.h>
 
 #define ENABLE_DISPLAY 0		// 定义一个宏，用于控制显示状态
 
@@ -73,23 +74,28 @@ int CloudBoundaryAC(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
 	// 1 计算法向量
 	pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
 	pcl::PointCloud<pcl::Normal>::Ptr  normals(new  pcl::PointCloud<pcl::Normal>);
-	pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> normalEstimation;
-	normalEstimation.setInputCloud(cloud);
-	normalEstimation.setSearchMethod(tree);
-	normalEstimation.setRadiusSearch(0.02);  // 法向量的半径
-	normalEstimation.compute(*normals);
+	pcl::NormalEstimationOMP<pcl::PointXYZ, pcl::Normal> ne;
+	ne.setInputCloud(cloud);
+	ne.setSearchMethod(tree);
+	ne.setNumberOfThreads(8);
+
+	ne.setKSearch(20);								// 近邻
+	//normalEstimation.setRadiusSearch(0.02);		// 半径
+	ne.compute(*normals);
 
 	/*pcl计算边界*/
 	pcl::PointCloud<pcl::Boundary>::Ptr boundaries(new pcl::PointCloud<pcl::Boundary>); //声明一个boundary类指针，作为返回值
-	boundaries->resize(cloud->size()); //初始化大小
-	pcl::BoundaryEstimation<pcl::PointXYZ, pcl::Normal, pcl::Boundary> boundary_estimation; //声明一个BoundaryEstimation类
-	boundary_estimation.setInputCloud(cloud); //设置输入点云
-	boundary_estimation.setInputNormals(normals); //设置输入法线
+	boundaries->resize(cloud->size());				// 初始化大小
+
+	pcl::BoundaryEstimation<pcl::PointXYZ, pcl::Normal, pcl::Boundary> be; //声明一个BoundaryEstimation类
+	be.setInputCloud(cloud);						// 设置输入点云
+	be.setInputNormals(normals);					// 设置输入法线
+
 	pcl::search::KdTree<pcl::PointXYZ>::Ptr kdtree_ptr(new pcl::search::KdTree<pcl::PointXYZ>);
-	boundary_estimation.setSearchMethod(kdtree_ptr); //设置搜寻k近邻的方式
-	boundary_estimation.setKSearch(30); //设置k近邻数量
-	boundary_estimation.setAngleThreshold(M_PI * 0.6); //设置角度阈值，大于阈值为边界
-	boundary_estimation.compute(*boundaries); //计算点云边界，结果保存在boundaries中
+	be.setSearchMethod(kdtree_ptr);					// 设置搜寻k近邻的方式
+	be.setKSearch(30);								// 设置k近邻数量
+	be.setAngleThreshold(M_PI * 0.6);				// 设置角度阈值，大于阈值为边界
+	be.compute(*boundaries);						// 计算点云边界，结果保存在boundaries中
 
 	cout << "AC提取边界点个数为   ：  " << boundaries->size() << endl;
 	cout << "AC提取边界点用时： " << time.toc() / 1000 << " 秒" << endl;
@@ -209,6 +215,7 @@ main(int argc, char** argv)
 	//pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_src(new pcl::PointCloud<pcl::PointXYZ>);
 	//pcl::io::loadPCDFile(argv[1], *cloud_src);
 	//estimateBorders(cloud_src, re, reforn);
+	omp_set_num_threads(8);
 
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloudFiltered(new pcl::PointCloud<pcl::PointXYZ>);
