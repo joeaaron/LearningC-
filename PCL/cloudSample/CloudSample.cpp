@@ -48,6 +48,7 @@ void CalCurvature1(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
 	ne.setSearchMethod(tree);
 	pcl::PointCloud<pcl::Normal>::Ptr cloud_normals(new pcl::PointCloud<pcl::Normal>);
 	ne.setKSearch(10);		// 设置法线计算的搜索步长
+	ne.setNumberOfThreads(8);
 	ne.compute(*cloud_normals);
 
 	// 定义存储曲率的结构体
@@ -101,7 +102,7 @@ void CalCurvature1(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
 	MView->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 1, 0, 0, "Raw cloud", v1);
 	MView->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 0, 1, 0, "Sampled cloud", v2);
 
-	MView->addCoordinateSystem(1.0);
+	//MView->addCoordinateSystem(1.0);
 	MView->initCameraParameters();
 
 	MView->spin();
@@ -120,6 +121,7 @@ void CalCurvature2(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
 	ne.setSearchMethod(tree);
 	pcl::PointCloud<pcl::Normal>::Ptr cloud_normals(new pcl::PointCloud<pcl::Normal>);
 	ne.setKSearch(10);		// 设置法线计算的搜索步长
+	ne.setNumberOfThreads(8);
 	ne.compute(*cloud_normals);
 
 	// 计算所有点的曲率
@@ -183,7 +185,7 @@ void CalCurvature2(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
 	MView->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 1, 0, 0, "Raw cloud", v1);
 	MView->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 0, 1, 0, "Sampled cloud", v2);
 
-	MView->addCoordinateSystem(1.0);
+	//MView->addCoordinateSystem(1.0);
 	MView->initCameraParameters();
 
 	MView->spin();
@@ -194,7 +196,7 @@ int main()
 {
 	// 加载点云数据
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
-	if (pcl::io::loadPCDFile<pcl::PointXYZ>("table_scene_lms400.pcd", *cloud) == -1)		// sac_plane_test.pcd | Scan_0511_1713.pcd
+	if (pcl::io::loadPCDFile<pcl::PointXYZ>("table_scene_lms400.pcd", *cloud) == -1)		// table_scene_lms400.pcd | rabbit.pcd
 	{
 		PCL_ERROR("点云读取失败 \n");
 		return (-1);
@@ -204,7 +206,7 @@ int main()
 	time.tic();
 
 	CalCurvature1(cloud);
-	std::cout << "直接计算曲率采样用时： " << time.toc() / 1000 << " 秒" << std::endl;
+	std::cout << "直接曲率采样用时： " << time.toc() / 1000 << " 秒" << std::endl;
 
 	time.tic();
 	CalCurvature2(cloud);
