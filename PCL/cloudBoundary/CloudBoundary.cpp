@@ -14,7 +14,6 @@
 #include <pcl/io/pcd_io.h>
 #include <pcl/visualization/range_image_visualizer.h>
 #include <pcl/features/normal_3d.h>
-#include <pcl/visualization/pcl_visualizer.h>
 #include <pcl/filters/covariance_sampling.h>
 #include <pcl/filters/normal_space.h>
 #include <pcl/kdtree/kdtree_flann.h>
