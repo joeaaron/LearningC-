@@ -23,8 +23,76 @@
 #include <pcl/console/time.h> 
 #include <pcl/surface/concave_hull.h>  
 #include <pcl/features/normal_3d_omp.h>
+#include <pcl/filters/statistical_outlier_removal.h>
 
-#define ENABLE_DISPLAY 0		// 定义一个宏，用于控制显示状态
+#define ENABLE_DISPLAY 1		// 定义一个宏，用于控制显示状态
+#define ENABLE_TEST 0			// 定义一个宏，用于控制显示状态
+
+const int TESTS_NUM = 50;
+
+namespace {
+	void ComputeNormals(pcl::PointCloud<pcl::Normal>::Ptr& pNormal, const pcl::PointCloud<pcl::PointXYZ>::Ptr& pCloudPtr)
+	{
+		pcl::NormalEstimationOMP<pcl::PointXYZ, pcl::Normal> ne;
+
+		ne.setInputCloud(pCloudPtr);
+		pcl::search::KdTree<pcl::PointXYZ>::Ptr kdtree(new pcl::search::KdTree<pcl::PointXYZ>);
+		ne.setSearchMethod(kdtree);
+		ne.setKSearch(20);
+		ne.setNumberOfThreads(4);
+		ne.compute(*pNormal);
+	}
+
+	// 在当前点建立坐标系
+	//			  分别为：法线n、法线与z轴（或x轴）叉乘得到的向量u，以及法线n与u的叉乘得到的向量v
+	// 建立局部正交坐标系（n, u, v均已经过单位化处理）
+	void GetCoordinateSystemOnPlane(const pcl::Normal& p_coeff, Eigen::Vector4f& u, Eigen::Vector4f& v)
+	{
+		pcl::Vector4fMapConst p_coeff_v = p_coeff.getNormalVector4fMap();
+		v = p_coeff_v.unitOrthogonal();
+		u = p_coeff_v.cross3(v);
+	}
+
+	bool IsBoundaryPoint(
+		const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud, const pcl::PointXYZ& q_point,
+		const std::vector<int>& indices,
+		const Eigen::Vector4f& u, const Eigen::Vector4f& v,
+		const float angle_threshold)
+	{
+		if (indices.size() < 3) return false;
+		if (!std::isfinite(q_point.x) || !std::isfinite(q_point.y) || !std::isfinite(q_point.z)) return false;
+
+		std::vector<float> angles(indices.size());
+		float max_dif = FLT_MIN, dif;
+		int cp = 0;
+
+		for (const auto& index : indices)
+		{
+			if (!std::isfinite(cloud->points[index].x) ||
+				!std::isfinite(cloud->points[index].y) ||
+				!std::isfinite(cloud->points[index].z)) continue;
+
+			Eigen::Vector4f delta = cloud->points[index].getVector4fMap() - q_point.getVector4fMap();
+
+			if (delta == Eigen::Vector4f::Zero()) continue;
+			angles[cp++] = std::atan2(v.dot(delta), u.dot(delta));
+		}
+
+		if (cp == 0) return false;
+		angles.resize(cp);
+		std::sort(angles.begin(), angles.end());
+
+		for (int i = 0; i < angles.size() - 1; i++)
+		{
+			dif = angles[i + 1] - angles[i];
+			max_dif = std::max(max_dif, dif);
+		}
+
+		dif = 2 * static_cast<float> (M_PI) - angles.back() + angles[0];
+		max_dif = std::max(max_dif, dif);
+		return (max_dif > angle_threshold);
+	}
+}
 
 void CloudBoundaryHull(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
 {
@@ -36,18 +104,19 @@ void CloudBoundaryHull(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
 	chull.setInputCloud(cloud); // 输入点云为投影后的点云
 	chull.setAlpha(1.2);        // 设置alpha值为0.1
 	chull.reconstruct(*cloud_hull);
-
+	
+#if ENABLE_DISPLAY
 	cout << "AS提取边界点个数为: " << cloud_hull->points.size() << endl;
-	cout << "AS提取边界点用时： " << time.toc() / 1000 << " 秒" << endl;
+	cout << "AS提取边界点用时: " << time.toc() / 1000 << " 秒" << endl;
+
 	pcl::PCDWriter writer;
 	writer.write("hull.pcd", *cloud_hull, false);
 
-#if ENABLE_DISPLAY
 	//-----------------结果显示---------------------
 	boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer(new pcl::visualization::PCLVisualizer("Cloud boundary extraction - AS"));
 
 	int v1(0), v2(0);
-	viewer->setWindowName("alpha_shapes提取边界");
+	viewer->setWindowName("Cloud boundary extraction - AS");
 	viewer->setBackgroundColor(0, 0, 0);
 	viewer->addPointCloud(cloud, "cloud");
 	viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 0, 1, 0, "cloud");
@@ -65,6 +134,95 @@ void CloudBoundaryHull(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
 #endif
 }
 
+int CloudBoundaryACEX(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
+{
+	pcl::console::TicToc time;
+	time.tic();
+
+	// 法向量计算
+	pcl::PointCloud<pcl::Normal>::Ptr pNormal(new pcl::PointCloud<pcl::Normal>);
+	ComputeNormals(pNormal, cloud);
+
+	// 构建kdtree
+	pcl::search::KdTree<pcl::PointXYZ> kdtree;
+	kdtree.setInputCloud(cloud);
+
+	Eigen::Vector4f u = Eigen::Vector4f::Zero(), v = Eigen::Vector4f::Zero();
+	pcl::PointCloud<pcl::Boundary>::Ptr outBoundary(new pcl::PointCloud<pcl::Boundary>);
+	outBoundary->resize(cloud->size());
+
+	std::vector<int> vNborIdx;
+	std::vector<float> vNborDist;
+
+	// 边界检测
+//#pragma omp parallel for
+	for (int i = 0; i < cloud->size(); i++)
+	{
+		kdtree.nearestKSearch(cloud->points[i], 30, vNborIdx, vNborDist);
+		GetCoordinateSystemOnPlane(pNormal->points[i], u, v);
+		outBoundary->points[i].boundary_point = IsBoundaryPoint(cloud, cloud->points[i], vNborIdx, u, v, M_PI * 0.6);
+	}
+#if ENABLE_DISPLAY
+	// 转换为边界点索引
+	std::vector<int> vIdx;
+	//vIndex.clear();
+	for (int i = 0; i < outBoundary->size(); ++i)
+	{
+		if (outBoundary->points[i].boundary_point != 0)
+		{
+			vIdx.emplace_back(i);
+		}
+	}
+
+	cout << "AC-X提取边界点用时： " << time.toc() / 1000 << " 秒" << endl;
+	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_boundary(new pcl::PointCloud<pcl::PointXYZ>);
+	pcl::copyPointCloud(*cloud, vIdx, *cloud_boundary);
+	cout << "AC-X提取边界点个数为： " << cloud_boundary->size() << endl;
+	//pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_visual(new pcl::PointCloud<pcl::PointXYZRGB>);
+	//pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_boundary(new pcl::PointCloud<pcl::PointXYZRGB>);
+	//cloud_visual->resize(cloud->size());
+	//for (size_t i = 0; i < cloud->size(); i++)
+	//{
+	//	cloud_visual->points[i].x = cloud->points[i].x;
+	//	cloud_visual->points[i].y = cloud->points[i].y;
+	//	cloud_visual->points[i].z = cloud->points[i].z;
+	//	if (outBoundary->points[i].boundary_point != 0)
+	//	{
+	//		cloud_visual->points[i].r = 255;
+	//		cloud_visual->points[i].g = 0;
+	//		cloud_visual->points[i].b = 0;
+	//		cloud_boundary->push_back(cloud_visual->points[i]);
+	//	}
+	//	else
+	//	{
+	//		cloud_visual->points[i].r = 255;
+	//		cloud_visual->points[i].g = 255;
+	//		cloud_visual->points[i].b = 255;
+	//	}
+	//}
+
+	//-----------------结果显示---------------------
+	boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer(new pcl::visualization::PCLVisualizer("Cloud boundary extraction - AS"));
+
+	int v1(0), v2(0);
+	viewer->setWindowName("Cloud boundary extraction - ACEX");
+	viewer->setBackgroundColor(0, 0, 0);
+	viewer->addPointCloud(cloud, "cloud");
+	viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 0, 1, 0, "cloud");
+	viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "cloud");
+
+	viewer->addPointCloud(cloud_boundary, "cloud_boundary");
+	viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 1, 0, 0, "cloud_boundary");
+	viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 2, "cloud_boundary");
+
+	while (!viewer->wasStopped())
+	{
+		viewer->spinOnce(1000);
+	}
+#endif
+	return 0;
+}
+
 int CloudBoundaryAC(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
 {
 	pcl::console::TicToc time;
@@ -76,7 +234,7 @@ int CloudBoundaryAC(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
 	pcl::NormalEstimationOMP<pcl::PointXYZ, pcl::Normal> ne;
 	ne.setInputCloud(cloud);
 	ne.setSearchMethod(tree);
-	ne.setNumberOfThreads(8);
+	ne.setNumberOfThreads(4);
 
 	ne.setKSearch(20);								// 近邻
 	//normalEstimation.setRadiusSearch(0.02);		// 半径
@@ -96,9 +254,9 @@ int CloudBoundaryAC(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
 	be.setAngleThreshold(M_PI * 0.6);				// 设置角度阈值，大于阈值为边界
 	be.compute(*boundaries);						// 计算点云边界，结果保存在boundaries中
 
-	cout << "AC提取边界点个数为   ：  " << boundaries->size() << endl;
 	cout << "AC提取边界点用时： " << time.toc() / 1000 << " 秒" << endl;
 
+#if ENABLE_DISPLAY
 	pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_visual(new pcl::PointCloud<pcl::PointXYZRGB>);
 	pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_boundary(new pcl::PointCloud<pcl::PointXYZRGB>);
 	cloud_visual->resize(cloud->size());
@@ -121,7 +279,8 @@ int CloudBoundaryAC(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
 			cloud_visual->points[i].b = 255;
 		}
 	}
-#if ENABLE_DISPLAY
+	cout << "AC提取边界点个数为   ：  " << cloud_boundary->size() << endl;
+
 	boost::shared_ptr<pcl::visualization::PCLVisualizer> MView(new pcl::visualization::PCLVisualizer("Cloud boundary extraction - AC"));
 
 	int v1(0);
@@ -139,7 +298,7 @@ int CloudBoundaryAC(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
 	MView->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 1, 0, 0, "sample cloud", v1);
 	MView->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 0, 1, 0, "cloud_boundary", v2);
 
-	MView->addCoordinateSystem(1.0);
+	//MView->addCoordinateSystem(1.0);
 	MView->initCameraParameters();
 
 	MView->spin();
@@ -200,6 +359,7 @@ int estimateBorders(pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud, float re, float 
 
 	return 0;
 }
+
 int
 main(int argc, char** argv)
 {
@@ -218,23 +378,73 @@ main(int argc, char** argv)
 
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloudFiltered(new pcl::PointCloud<pcl::PointXYZ>);
-	if (pcl::io::loadPCDFile<pcl::PointXYZ>("table_scene_lms400.pcd", *cloud) == -1)		// sac_plane_test.pcd | Scan_0511_1713.pcd
+	if (pcl::io::loadPCDFile<pcl::PointXYZ>("table_scene_lms400.pcd", *cloud) == -1)		// sac_plane_test.pcd | Scan_0511_1713.pcd | table_scene_lms400.pcd
 	{
 		PCL_ERROR("点云读取失败 \n");
 		return (-1);
 	}
 
+	// 统计学滤波
+	pcl::StatisticalOutlierRemoval<pcl::PointXYZ> filter;
+
+	filter.setInputCloud(cloud);
+	filter.setMeanK(10);
+	filter.setStddevMulThresh(0.5);
+	filter.filter(*cloudFiltered);
+	
 	// 均匀下采样
 	pcl::UniformSampling<pcl::PointXYZ> us;
-	us.setInputCloud(cloud);
+	us.setInputCloud(cloudFiltered);
 	us.setRadiusSearch(0.01f);
 	us.filter(*cloudFiltered);
 
+#if ENABLE_TEST
+	// 算法测试框架
+	std::vector<double> vTimes;
+	double dMaxTime = 0.0;
+
+	for (int i = 0; i < TESTS_NUM; ++i)
+	{
+		auto start = std::chrono::high_resolution_clock::now();
+		// Angle Criterion算法
+		//CloudBoundaryAC(cloudFiltered);
+		
+		// 优化后的Angle Criterion算法
+		CloudBoundaryACEX(cloudFiltered);
+
+		// Alpha Shape算法
+		//CloudBoundaryHull(cloudFiltered);
+
+		auto end = std::chrono::high_resolution_clock::now();
+
+		std::chrono::duration<double, std::milli> duration = end - start;
+		vTimes.emplace_back(duration.count());
+
+		if (duration.count() > dMaxTime)
+		{
+			dMaxTime = duration.count();
+		}
+	}
+
+	double dAverageTime = std::accumulate(vTimes.begin(), vTimes.end(), 0.0) / vTimes.size();
+	//std::cout << "AC边界提取平均用时： " << dAverageTime << "ms" << std::endl;
+	//std::cout << "AC边界提取最大用时： " << dMaxTime << " ms" << std::endl;
+
+	std::cout << "改进后的AC边界提取平均用时： " << dAverageTime << "ms" << std::endl;
+	std::cout << "改进后的AC边界提取最大用时： " << dMaxTime << " ms" << std::endl;
+
+	//std::cout << "AS边界提取平均用时： " << dAverageTime << "ms" << std::endl;
+	//std::cout << "AS边界提取最大用时： " << dMaxTime << " ms" << std::endl;
+#endif
+
+	// 单步调试
 	// Angle Criterion算法
 	CloudBoundaryAC(cloudFiltered);
 	
+	CloudBoundaryACEX(cloudFiltered);
+
 	// Alpha Shape算法
-	CloudBoundaryHull(cloudFiltered);
+	//CloudBoundaryHull(cloudFiltered);
 
 	return 0;
 }
