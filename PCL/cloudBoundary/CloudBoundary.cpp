@@ -24,11 +24,13 @@
 #include <pcl/surface/concave_hull.h>  
 #include <pcl/features/normal_3d_omp.h>
 #include <pcl/filters/statistical_outlier_removal.h>
+#include <pcl/filters/voxel_grid.h>
 
 #define ENABLE_DISPLAY 1		// 定义一个宏，用于控制显示状态
-#define ENABLE_TEST 0			// 定义一个宏，用于控制显示状态
+#define ENABLE_TEST 0			// 定义一个宏，用于控制算法测试
 
-const int TESTS_NUM = 50;
+const int TESTS_NUM = 20;
+const int KSERACH_SIZE = 70;
 
 namespace {
 	void ComputeNormals(pcl::PointCloud<pcl::Normal>::Ptr& pNormal, const pcl::PointCloud<pcl::PointXYZ>::Ptr& pCloudPtr)
@@ -38,7 +40,7 @@ namespace {
 		ne.setInputCloud(pCloudPtr);
 		pcl::search::KdTree<pcl::PointXYZ>::Ptr kdtree(new pcl::search::KdTree<pcl::PointXYZ>);
 		ne.setSearchMethod(kdtree);
-		ne.setKSearch(20);
+		ne.setKSearch(KSERACH_SIZE);
 		ne.setNumberOfThreads(4);
 		ne.compute(*pNormal);
 	}
@@ -147,22 +149,40 @@ int CloudBoundaryACEX(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
 	pcl::search::KdTree<pcl::PointXYZ> kdtree;
 	kdtree.setInputCloud(cloud);
 
-	Eigen::Vector4f u = Eigen::Vector4f::Zero(), v = Eigen::Vector4f::Zero();
 	pcl::PointCloud<pcl::Boundary>::Ptr outBoundary(new pcl::PointCloud<pcl::Boundary>);
 	outBoundary->resize(cloud->size());
 
-	std::vector<int> vNborIdx;
-	std::vector<float> vNborDist;
-
-	// 边界检测
-//#pragma omp parallel for
+#pragma omp parallel for
 	for (int i = 0; i < cloud->size(); i++)
 	{
-		kdtree.nearestKSearch(cloud->points[i], 30, vNborIdx, vNborDist);
+		std::vector<int> vNborIdx;
+		std::vector<float> vNborDist;
+		kdtree.nearestKSearch(cloud->points[i], KSERACH_SIZE, vNborIdx, vNborDist);
+
+		Eigen::Vector4f u = Eigen::Vector4f::Zero(), v = Eigen::Vector4f::Zero();
 		GetCoordinateSystemOnPlane(pNormal->points[i], u, v);
-		outBoundary->points[i].boundary_point = IsBoundaryPoint(cloud, cloud->points[i], vNborIdx, u, v, M_PI * 0.6);
+
+		bool isBoundary = IsBoundaryPoint(cloud, cloud->points[i], vNborIdx, u, v, M_PI * 0.6);
+
+		// 使用互斥锁保护临界区域
+#pragma omp critical
+		{
+			outBoundary->points[i].boundary_point = isBoundary;
+		}
 	}
-#if ENABLE_DISPLAY
+
+//	std::vector<int> vNborIdx;
+//	std::vector<float> vNborDist;
+//
+//	// 边界检测
+//#pragma omp parallel for reduction(:vNborIdx)
+//	for (int i = 0; i < cloud->size(); i++)
+//	{
+//		kdtree.nearestKSearch(cloud->points[i], 30, vNborIdx, vNborDist);
+//		GetCoordinateSystemOnPlane(pNormal->points[i], u, v);
+//		outBoundary->points[i].boundary_point = IsBoundaryPoint(cloud, cloud->points[i], vNborIdx, u, v, M_PI * 0.6);
+//	}
+
 	// 转换为边界点索引
 	std::vector<int> vIdx;
 	//vIndex.clear();
@@ -174,10 +194,10 @@ int CloudBoundaryACEX(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
 		}
 	}
 
-	cout << "AC-X提取边界点用时： " << time.toc() / 1000 << " 秒" << endl;
+	cout << "优化后AC检测边界点用时： " << time.toc() << "ms" << endl;
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_boundary(new pcl::PointCloud<pcl::PointXYZ>);
 	pcl::copyPointCloud(*cloud, vIdx, *cloud_boundary);
-	cout << "AC-X提取边界点个数为： " << cloud_boundary->size() << endl;
+	cout << "优化后AC检测边界点个数为： " << cloud_boundary->size() << endl;
 	//pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_visual(new pcl::PointCloud<pcl::PointXYZRGB>);
 	//pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_boundary(new pcl::PointCloud<pcl::PointXYZRGB>);
 	//cloud_visual->resize(cloud->size());
@@ -200,7 +220,7 @@ int CloudBoundaryACEX(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
 	//		cloud_visual->points[i].b = 255;
 	//	}
 	//}
-
+#if ENABLE_DISPLAY
 	//-----------------结果显示---------------------
 	boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer(new pcl::visualization::PCLVisualizer("Cloud boundary extraction - AS"));
 
@@ -254,7 +274,7 @@ int CloudBoundaryAC(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
 	be.setAngleThreshold(M_PI * 0.6);				// 设置角度阈值，大于阈值为边界
 	be.compute(*boundaries);						// 计算点云边界，结果保存在boundaries中
 
-	cout << "AC提取边界点用时： " << time.toc() / 1000 << " 秒" << endl;
+	cout << "AC检测边界点用时： " << time.toc() / 1000 << " 秒" << endl;
 
 #if ENABLE_DISPLAY
 	pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_visual(new pcl::PointCloud<pcl::PointXYZRGB>);
@@ -279,7 +299,7 @@ int CloudBoundaryAC(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
 			cloud_visual->points[i].b = 255;
 		}
 	}
-	cout << "AC提取边界点个数为   ：  " << cloud_boundary->size() << endl;
+	cout << "AC检测边界点个数为   ：  " << cloud_boundary->size() << endl;
 
 	boost::shared_ptr<pcl::visualization::PCLVisualizer> MView(new pcl::visualization::PCLVisualizer("Cloud boundary extraction - AC"));
 
@@ -378,7 +398,7 @@ main(int argc, char** argv)
 
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloudFiltered(new pcl::PointCloud<pcl::PointXYZ>);
-	if (pcl::io::loadPCDFile<pcl::PointXYZ>("table_scene_lms400.pcd", *cloud) == -1)		// sac_plane_test.pcd | Scan_0511_1713.pcd | table_scene_lms400.pcd
+	if (pcl::io::loadPCDFile<pcl::PointXYZ>("test.pcd", *cloud) == -1)		// sac_plane_test.pcd | 800w.pcd | table_scene_lms400.pcd
 	{
 		PCL_ERROR("点云读取失败 \n");
 		return (-1);
@@ -393,10 +413,16 @@ main(int argc, char** argv)
 	filter.filter(*cloudFiltered);
 	
 	// 均匀下采样
-	pcl::UniformSampling<pcl::PointXYZ> us;
-	us.setInputCloud(cloudFiltered);
-	us.setRadiusSearch(0.01f);
-	us.filter(*cloudFiltered);
+	//pcl::UniformSampling<pcl::PointXYZ> us;
+	//us.setInputCloud(cloudFiltered);
+	//us.setRadiusSearch(0.01f);
+	//us.filter(*cloudFiltered);
+
+	pcl::VoxelGrid<pcl::PointXYZ> vg;
+
+	vg.setInputCloud(cloudFiltered);
+	vg.setLeafSize(0.01, 0.01, 0.01);
+	vg.filter(*cloudFiltered);
 
 #if ENABLE_TEST
 	// 算法测试框架
@@ -430,8 +456,8 @@ main(int argc, char** argv)
 	//std::cout << "AC边界提取平均用时： " << dAverageTime << "ms" << std::endl;
 	//std::cout << "AC边界提取最大用时： " << dMaxTime << " ms" << std::endl;
 
-	std::cout << "改进后的AC边界提取平均用时： " << dAverageTime << "ms" << std::endl;
-	std::cout << "改进后的AC边界提取最大用时： " << dMaxTime << " ms" << std::endl;
+	std::cout << "优化后的AC边界提取平均用时： " << dAverageTime << "ms" << std::endl;
+	std::cout << "优化后的AC边界提取最大用时： " << dMaxTime << " ms" << std::endl;
 
 	//std::cout << "AS边界提取平均用时： " << dAverageTime << "ms" << std::endl;
 	//std::cout << "AS边界提取最大用时： " << dMaxTime << " ms" << std::endl;
@@ -439,12 +465,12 @@ main(int argc, char** argv)
 
 	// 单步调试
 	// Angle Criterion算法
-	CloudBoundaryAC(cloudFiltered);
+	// CloudBoundaryAC(cloudFiltered);
 	
 	CloudBoundaryACEX(cloudFiltered);
 
 	// Alpha Shape算法
-	//CloudBoundaryHull(cloudFiltered);
+	// CloudBoundaryHull(cloudFiltered);
 
 	return 0;
 }
