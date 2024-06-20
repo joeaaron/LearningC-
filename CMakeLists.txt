@@ -22,6 +22,8 @@ option(BUILD_BASIC	"Build Basic"  OFF)
 option(BUILD_PRACTICE	"Build Practice"  OFF)
 option(BUILD_STL	"Build STL"  OFF)
 
+set (VCG_INCLUDE_DIRS ${CMAKE_SOURCE_DIR}/include)
+
 if(BUILD_AlGORITHM)
 	add_subdirectory(Algorithm)
 endif(BUILD_AlGORITHM)

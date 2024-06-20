@@ -16,6 +16,9 @@
 #include <pcl/io/vtk_io.h>
 #include <pcl/io/vtk_lib_io.h>
 #include <pcl/surface/ear_clipping.h> // 耳朵裁剪三角剖分算法
+#include <pcl/surface/vtk_smoothing/vtk_utils.h> 
+
+#include <vtkDecimatePro.h>
 
 #define ENABLE_DISPLAY 1			  // 定义一个宏，用于控制显示状态
 
@@ -59,7 +62,7 @@ void GreedyTriangle(pcl::PolygonMesh& triangles,
 	gp3.setMinimumAngle(M_PI / 18);          //10 degrees，设置三角化后三角形的最小角，参数 minimum_angle 为最小角的值。
 	gp3.setMaximumAngle(2 * M_PI / 3);       //120 degrees，设置三角化后三角形的最大角，参数 maximum_angle 为最大角的值。
 	gp3.setNormalConsistency(false);		 //设置一个标志 consistent ，来保证法线朝向一致，如果设置为 true 则会使得算法保持法线方向一致，如果为 false 算法则不会进行法线一致性检查。
-
+	
 	// Get result
 	gp3.setInputCloud(cloud_with_normals);	 //设置输入点云为有向点云
 	gp3.setSearchMethod(tree2);				 //设置搜索方式tree2
@@ -308,17 +311,62 @@ main(int argc, char** argv)
 
 	pcl::PolygonMesh triangles;
 	//GreedyTriangle(triangles, cloud, cloud_with_normals);					// 贪婪投影三角
-	//PossionTriangle(triangles, cloud, cloud_with_normals);				// 泊松重建
+	PossionTriangle(triangles, cloud, cloud_with_normals);					// 泊松重建
 	//GridTriangle(triangles, cloud, cloud_with_normals);						// 网格投影曲面重建
 	//MarchingCubesTriangles(triangles, cloud, cloud_with_normals);			// 移动立方体
 
 	// -----------------------------读取mesh数据-------------------------------
-	pcl::PolygonMesh::Ptr mesh(new pcl::PolygonMesh);
-	if (pcl::io::loadPolygonFileVTK("tum_rabbit.vtk", *mesh) == -1)			// tum_rabbit.vtk | sphere.vtk"
+	//pcl::PolygonMesh::Ptr mesh(new pcl::PolygonMesh);
+	//if (pcl::io::loadPolygonFileVTK("tum_rabbit.vtk", *mesh) == -1)			// tum_rabbit.vtk | sphere.vtk"
+	//{
+	//	std::cerr << "数据读取失败！！！" << std::endl;
+	//}
+	//EarClippintTriangles(triangles, mesh);									 // 耳切三角剖分
+
+	size_t polygonNums = triangles.polygons.size();
+	std::cout << "面片数：" << polygonNums << std::endl;
+
+	//for (int i = 0; i < polygonNums; ++i)
+	//{
+	//	std::cout << "polygon" << i << "has" << triangles.polygons[i].vertices.size() << "vertices." << std::endl;
+	//}
+	// 网格简化
+	vtkSmartPointer<vtkPolyData> vtkMesh;
+	pcl::VTKUtils::convertToVTK(triangles, vtkMesh);
+
+	// 使用VTK的DecimatePro 进行简化
+	vtkSmartPointer<vtkDecimatePro> decimate = vtkSmartPointer<vtkDecimatePro>::New();
+	decimate->SetInputData(vtkMesh);
+	decimate->SetTargetReduction(0.5);   // 减少50%的面
+	decimate->Update();
+
+	// 将简化后的VTK网格转回PCL
+	vtkSmartPointer<vtkPolyData> simplifiedVTKMesh = decimate->GetOutput();
+	pcl::PolygonMesh simplifiedMesh;
+	pcl::VTKUtils::convertToPCL(simplifiedVTKMesh, simplifiedMesh);
+
+	polygonNums = simplifiedMesh.polygons.size();
+	std::cout << "简化后的面片数：" << polygonNums << std::endl;
+
+#if ENABLE_DISPLAY
+	//----------------------------------结果可视化-----------------------------------
+	boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer(new pcl::visualization::PCLVisualizer("3D Viewer"));
+	viewer->setWindowName(u8"贪婪投影三角化");
+	int v1(0), v2(0);
+	viewer->createViewPort(0, 0, 0.5, 1, v1);
+	viewer->createViewPort(0.5, 0, 1, 1, v2);
+	viewer->setBackgroundColor(0, 0, 0, v1);
+	viewer->setBackgroundColor(0.3, 0.3, 0.3, v2);
+	viewer->addPointCloud<pcl::PointXYZ>(cloud, "cloud", v1);	  // 可视化点云
+	viewer->addPolygonMesh(simplifiedMesh, "my", v2);             // 可视化模型重建结果
+	viewer->setRepresentationToSurfaceForAllActors();             // 网格模型以线框图模式显示
+
+	while (!viewer->wasStopped())
 	{
-		std::cerr << "数据读取失败！！！" << std::endl;
+		viewer->spinOnce(100);
+		//boost::this_thread::sleep(boost::posix_time::microseconds(100000));
 	}
-	EarClippintTriangles(triangles, mesh);									 // 耳切三角剖分
+#endif
 
 	return (0);
 }
