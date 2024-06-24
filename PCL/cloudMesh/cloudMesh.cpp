@@ -32,10 +32,10 @@ void PreprocessPointCloud(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
 	sor.filter(*cloud);
 
 	// 体素采样
-	//pcl::VoxelGrid<pcl::PointXYZ> vg;
-	//vg.setInputCloud(cloud);
-	//vg.setLeafSize(0.01, 0.01, 0.01);
-	//vg.filter(*cloud);
+	pcl::VoxelGrid<pcl::PointXYZ> vg;
+	vg.setInputCloud(cloud);
+	vg.setLeafSize(0.01, 0.01, 0.01);
+	vg.filter(*cloud);
 }
 
 void GreedyTriangle(pcl::PolygonMesh& triangles, 
@@ -283,7 +283,7 @@ main(int argc, char** argv)
 {
 	// Load input file into a PointCloud<T> with an appropriate type
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
-	if (pcl::io::loadPCDFile<pcl::PointXYZ>("bunny.pcd", *cloud) == -1)		// sac_plane_test.pcd | 800w.pcd | table_scene_lms400.pcd
+	if (pcl::io::loadPCDFile<pcl::PointXYZ>("800w.pcd", *cloud) == -1)		// sac_plane_test.pcd | 800w.pcd | table_scene_lms400.pcd
 	{
 		PCL_ERROR("点云读取失败 \n");
 		return (-1);

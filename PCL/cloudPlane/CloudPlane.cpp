@@ -10,10 +10,11 @@
 #include <pcl/common/eigen.h>
 #include <pcl/common/centroid.h>
 #include <pcl/segmentation/sac_segmentation.h>
+#include <pcl/filters/extract_indices.h>
 #include <chrono>
 
 #define ENABLE_DISPLAY	  1					// 定义一个宏，用于控制显示状态
-#define ENABLE_PLANE_INFO 0
+#define ENABLE_PLANE_INFO 1
 
 using namespace std;
 
@@ -45,10 +46,16 @@ void SEGPlaneFit(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
 		<< "D=" << coefficients[3] << "\n" << endl;
 #endif
 
+	pcl::ExtractIndices<pcl::PointXYZ> extract;
+	extract.setInputCloud(cloud);
+	extract.setIndices(inliers); 
+	extract.setNegative(true);
+	pcl::PointCloud<pcl::PointXYZ>::Ptr segCloud(new pcl::PointCloud<pcl::PointXYZ>);
+	extract.filter(*segCloud);
 	 //--------------------------------根据内点索引提取拟合的平面点云-----------------------------------
-#if 0
-	pcl::PointCloud<pcl::PointXYZ>::Ptr sac_plane(new pcl::PointCloud<pcl::PointXYZ>);
-	pcl::copyPointCloud<pcl::PointXYZ>(*cloud, inliers, *sac_plane);
+#if ENABLE_DISPLAY
+	/*pcl::PointCloud<pcl::PointXYZ>::Ptr sac_plane(new pcl::PointCloud<pcl::PointXYZ>);
+	pcl::copyPointCloud<pcl::PointXYZ>(*cloud, inliers, *sac_plane);*/
 	// pcl::io::savePCDFileASCII("1.11.pcd", *final);
 	//-------------------------------------------可视化-------------------------------------------------
 	boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer(new pcl::visualization::PCLVisualizer("cloud show"));
@@ -61,10 +68,10 @@ void SEGPlaneFit(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
 	viewer->setBackgroundColor(0, 0, 0, v2);
 
 	pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> color(cloud, 0, 255, 0);
-	pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> after_sac(sac_plane, 0, 0, 255);
+	pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> after_sac(segCloud, 0, 0, 255);
 
 	viewer->addPointCloud(cloud, color, "cloud", v1);
-	//viewer->addPointCloud(sac_plane, after_sac, "plane cloud", v2);
+	viewer->addPointCloud(segCloud, after_sac, "plane cloud", v2);
 
 	// 显示拟合出来的平面
 	pcl::ModelCoefficients plane;
@@ -111,6 +118,27 @@ void RANSCAPlaneFit(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
 	<< "C=" << coefficients[2] << "\n"
 	<< "D=" << coefficients[3] << "\n" << endl;
 #endif
+
+	
+	//std::vector<int> remainIndices;
+	//for (int i = 0; i < cloud->size(); ++i)
+	//{
+	//	if (std::find(inliers.begin(), inliers.end(), i) == inliers.end())
+	//	{
+	//		remainIndices.emplace_back(i);
+	//	}
+	//}
+	//pcl::PointCloud<pcl::PointXYZ>::Ptr segCloud(new pcl::PointCloud<pcl::PointXYZ>);
+	//for (int i = 0; i < cloud->size(); ++i)
+	//{
+	//	Eigen::Vector3d point(cloud->points[i].x, cloud->points[i].y, cloud->points[i].z);
+	//	Eigen::Vector3d normal(coefficients[0], coefficients[1], coefficients[2]);
+	//	if ((point.dot(normal) + coefficients[3]) > 0)
+	//	{
+	//		segCloud->points.emplace_back(cloud->points[i]);
+	//	}
+	//}
+
     /*
      //-------------------平面法向量定向，与（1，1，1）同向，并输出平面与原点的距离D---------------------------
      double a, b, c, d, A, B, C, D;//a,b,c为拟合平面的单位法向量，A,B,C为重定向后的法向量
@@ -206,6 +234,20 @@ void LeastSquareFit(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
 		<< "D=" << D << "\n" << endl;
 #endif
 
+	pcl::PointCloud<pcl::PointXYZ>::Ptr segCloud(new pcl::PointCloud<pcl::PointXYZ>);
+	for (int i = 0; i < cloud->size(); ++i)
+	{
+		Eigen::Vector3d point(cloud->points[i].x, cloud->points[i].y, cloud->points[i].z);
+		if ((point.dot(normal) + D) > 0)
+		{
+			segCloud->points.emplace_back(cloud->points[i]);
+		}
+		/*double dRes = cloud->points[i].x * normal[0] + cloud->points[i].y * normal[1] + cloud->points[i].z * normal[2] + D;
+		if (dRes > 0)
+		{
+			segCloud->points.emplace_back(cloud->points[i]);
+		}*/
+	}
 #if ENABLE_DISPLAY
 	// 显示拟合出来的平面
 	pcl::ModelCoefficients plane;
@@ -227,7 +269,7 @@ void LeastSquareFit(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
 	viewer->addText("Plane fit cloud", 10, 10, "v2_text", v2);
 
 	viewer->addPointCloud<pcl::PointXYZ>(cloud, "Raw cloud", v1);
-	//viewer->addPointCloud<pcl::PointXYZ>(sac_plane, "Plane fit cloud", v2);
+	viewer->addPointCloud<pcl::PointXYZ>(segCloud, "Plane fit cloud", v2);
 
 	viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 1, 0, 0, "Raw cloud", v1);
 	viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 0, 1, 0, "Plane fit cloud", v2);
@@ -236,7 +278,7 @@ void LeastSquareFit(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
 	viewer->initCameraParameters();
 
 	// 显示拟合出来的平面
-	viewer->addPlane(plane, "cloud", v2);
+	//viewer->addPlane(plane, "cloud", v2);
 
 	while (!viewer->wasStopped())
 	{
@@ -263,9 +305,9 @@ main(int argc, char** argv)
 	//	PCL_ERROR("点云读取失败 \n");
 	//	return (-1);
 	//}
-    auto startOp1 = std::chrono::high_resolution_clock::now();
-    RANSCAPlaneFit(cloud);
-    auto endOp1 = std::chrono::high_resolution_clock::now();
+	auto startOp1 = std::chrono::high_resolution_clock::now();
+	RANSCAPlaneFit(cloud);
+	auto endOp1 = std::chrono::high_resolution_clock::now();
 	std::chrono::duration<double> elapsedOp1 = endOp1 - startOp1;
 	std::cout << "RANSAC平面拟合: " << elapsedOp1.count() << " seconds" << std::endl;
 
@@ -275,9 +317,9 @@ main(int argc, char** argv)
 	std::chrono::duration<double> elapsedOp2 = endOp2 - startOp2;
 	std::cout << "RANSAC分割拟合: " << elapsedOp2.count() << " seconds" << std::endl;
 
-    auto startOp3 = std::chrono::high_resolution_clock::now();
-    LeastSquareFit(cloud);
-    auto endOp3 = std::chrono::high_resolution_clock::now();
+	auto startOp3 = std::chrono::high_resolution_clock::now();
+	LeastSquareFit(cloud);
+	auto endOp3 = std::chrono::high_resolution_clock::now();
 	std::chrono::duration<double> elapsedOp3 = endOp3 - startOp3;
 	std::cout << "最小二乘平面拟合: " << elapsedOp3.count() << " seconds" << std::endl;
 
