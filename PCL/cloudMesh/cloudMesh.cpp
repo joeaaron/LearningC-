@@ -17,25 +17,33 @@
 #include <pcl/io/vtk_lib_io.h>
 #include <pcl/surface/ear_clipping.h> // 耳朵裁剪三角剖分算法
 #include <pcl/surface/vtk_smoothing/vtk_utils.h> 
-
+#include <pcl/filters/uniform_sampling.h>
 #include <vtkDecimatePro.h>
+#include <pcl/surface/vtk_smoothing/vtk_utils.h>
+#include <pcl/surface/vtk_smoothing/vtk_mesh_smoothing_laplacian.h>
 
 #define ENABLE_DISPLAY 1			  // 定义一个宏，用于控制显示状态
 
 void PreprocessPointCloud(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
 {
 	// 统计滤波
-	pcl::StatisticalOutlierRemoval<pcl::PointXYZ> sor;
-	sor.setInputCloud(cloud);
-	sor.setMeanK(10);
-	sor.setStddevMulThresh(0.5);
-	sor.filter(*cloud);
+	//pcl::StatisticalOutlierRemoval<pcl::PointXYZ> sor;
+	//sor.setInputCloud(cloud);
+	//sor.setMeanK(10);
+	//sor.setStddevMulThresh(0.5);
+	//sor.filter(*cloud);
 
 	// 体素采样
-	pcl::VoxelGrid<pcl::PointXYZ> vg;
-	vg.setInputCloud(cloud);
-	vg.setLeafSize(0.01, 0.01, 0.01);
-	vg.filter(*cloud);
+	//pcl::UniformSampling<pcl::PointXYZ> uniform;
+	//uniform.setInputCloud(cloud);
+	//uniform.setRadiusSearch(0.25);
+	//uniform.filter(*cloud);
+
+	// 均匀采样
+	//pcl::VoxelGrid<pcl::PointXYZ> vg;
+	//vg.setInputCloud(cloud);
+	//vg.setLeafSize(0.25, 0.25, 0.25);
+	//vg.filter(*cloud);
 }
 
 void GreedyTriangle(pcl::PolygonMesh& triangles, 
@@ -53,14 +61,14 @@ void GreedyTriangle(pcl::PolygonMesh& triangles,
 	pcl::GreedyProjectionTriangulation<pcl::PointNormal> gp3;//定义三角化对象
 
 	// Set the maximum distance between connected points (maximum edge length)
-	gp3.setSearchRadius(0.025);								//设置搜索半径radius，来确定三角化时k一邻近的球半径。
+	gp3.setSearchRadius(4);								//设置搜索半径radius，来确定三角化时k一邻近的球半径。
 
 	// Set typical values for the parameters
-	gp3.setMu(2.5);							 //设置样本点到最近邻域距离的乘积系数 mu 来获得每个样本点的最大搜索距离，这样使得算法自适应点云密度的变化
+	gp3.setMu(3);							 //设置样本点到最近邻域距离的乘积系数 mu 来获得每个样本点的最大搜索距离，这样使得算法自适应点云密度的变化
 	gp3.setMaximumNearestNeighbors(100);	 //设置样本点最多可以搜索的邻域数目100 。
 	gp3.setMaximumSurfaceAngle(M_PI / 4);    //45 degrees，设置连接时的最大角度 eps_angle ，当某点法线相对于采样点的法线偏离角度超过该最大角度时，连接时就不考虑该点。
-	gp3.setMinimumAngle(M_PI / 18);          //10 degrees，设置三角化后三角形的最小角，参数 minimum_angle 为最小角的值。
-	gp3.setMaximumAngle(2 * M_PI / 3);       //120 degrees，设置三角化后三角形的最大角，参数 maximum_angle 为最大角的值。
+	gp3.setMinimumAngle(M_PI / 5);           //10 degrees，设置三角化后三角形的最小角，参数 minimum_angle 为最小角的值。
+	gp3.setMaximumAngle(2 * M_PI / 3);	 //120 degrees，设置三角化后三角形的最大角，参数 maximum_angle 为最大角的值。
 	gp3.setNormalConsistency(false);		 //设置一个标志 consistent ，来保证法线朝向一致，如果设置为 true 则会使得算法保持法线方向一致，如果为 false 算法则不会进行法线一致性检查。
 	
 	// Get result
@@ -81,22 +89,23 @@ void GreedyTriangle(pcl::PolygonMesh& triangles,
 	*/
 	std::vector<int> states = gp3.getPointStates();
 
-	cout << "贪婪投影三角化算法用时： " << time.toc() / 1000 << " 秒" << endl;
+	cout << "点云三角化算法用时： " << time.toc() / 1000 << " 秒" << endl;
 
 #if ENABLE_DISPLAY
 	//----------------------------------结果可视化-----------------------------------
 	boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer(new pcl::visualization::PCLVisualizer("3D Viewer"));
 	viewer->setWindowName(u8"贪婪投影三角化");
-	int v1(0), v2(0);
-	viewer->createViewPort(0, 0, 0.5, 1, v1);
-	viewer->createViewPort(0.5, 0, 1, 1, v2);
-	viewer->setBackgroundColor(0, 0, 0, v1);
-	viewer->setBackgroundColor(0.3, 0.3, 0.3, v2);
-	viewer->addPointCloud<pcl::PointXYZ>(cloud, "cloud", v1);	 // 可视化点云
-	viewer->addPolygonMesh(triangles, "my", v2);                 // 可视化模型重建结果
+	//int v1(0), v2(0);
+	//viewer->createViewPort(0, 0, 0.5, 1, v1);
+	////viewer->createViewPort(0.5, 0, 1, 1, v2);
+	//viewer->setBackgroundColor(0, 0, 0, v1);
+	//viewer->setBackgroundColor(0.3, 0.3, 0.3, v2);
+	viewer->addPointCloud<pcl::PointXYZ>(cloud, "cloud");	 // 可视化点云
+	viewer->addPolygonMesh(triangles, "my");                 // 可视化模型重建结果
 	viewer->setRepresentationToSurfaceForAllActors();            // 网格模型以线框图模式显示
 	//viewer->addCoordinateSystem(0.2);
-	//viewer->initCameraParameters();
+	viewer->initCameraParameters();
+	viewer->spin();
 	while (!viewer->wasStopped())
 	{
 		viewer->spinOnce(100);
@@ -146,7 +155,8 @@ void PossionTriangle(pcl::PolygonMesh& triangles,
 	viewer->addPolygonMesh(triangles, "my", v2);                 // 可视化模型重建结果
 	viewer->setRepresentationToSurfaceForAllActors();            // 网格模型以线框图模式显示
 	//viewer->addCoordinateSystem(0.2);
-	//viewer->initCameraParameters();
+	viewer->initCameraParameters();
+	viewer->spin();
 	while (!viewer->wasStopped())
 	{
 		viewer->spinOnce(100);
@@ -283,7 +293,7 @@ main(int argc, char** argv)
 {
 	// Load input file into a PointCloud<T> with an appropriate type
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
-	if (pcl::io::loadPCDFile<pcl::PointXYZ>("800w.pcd", *cloud) == -1)		// sac_plane_test.pcd | 800w.pcd | table_scene_lms400.pcd
+	if (pcl::io::loadPCDFile<pcl::PointXYZ>("realtimemesh.pcd", *cloud) == -1)		// sac_plane_test.pcd | 800w.pcd | table_scene_lms400.pcd
 	{
 		PCL_ERROR("点云读取失败 \n");
 		return (-1);
@@ -309,10 +319,10 @@ main(int argc, char** argv)
 	pcl::concatenateFields(*cloud, *normals, *cloud_with_normals);							//连接字段，cloud_with_normals存储有向点云
 	//* cloud_with_normals = cloud + normals
 
-	pcl::PolygonMesh triangles;
-	//GreedyTriangle(triangles, cloud, cloud_with_normals);					// 贪婪投影三角
-	PossionTriangle(triangles, cloud, cloud_with_normals);					// 泊松重建
-	//GridTriangle(triangles, cloud, cloud_with_normals);						// 网格投影曲面重建
+	pcl::PolygonMesh::Ptr triangles(new pcl::PolygonMesh);
+	GreedyTriangle(*triangles, cloud, cloud_with_normals);					// 贪婪投影三角
+	//PossionTriangle(triangles, cloud, cloud_with_normals);				// 泊松重建
+	//GridTriangle(triangles, cloud, cloud_with_normals);					// 网格投影曲面重建
 	//MarchingCubesTriangles(triangles, cloud, cloud_with_normals);			// 移动立方体
 
 	// -----------------------------读取mesh数据-------------------------------
@@ -323,16 +333,46 @@ main(int argc, char** argv)
 	//}
 	//EarClippintTriangles(triangles, mesh);									 // 耳切三角剖分
 
-	size_t polygonNums = triangles.polygons.size();
+	size_t polygonNums = triangles->polygons.size();
 	std::cout << "面片数：" << polygonNums << std::endl;
 
 	//for (int i = 0; i < polygonNums; ++i)
 	//{
 	//	std::cout << "polygon" << i << "has" << triangles.polygons[i].vertices.size() << "vertices." << std::endl;
 	//}
+	
+	// 使用Laplacian光顺算法
+	pcl::MeshSmoothingLaplacianVTK smoother;
+	pcl::PolygonMesh smoothed_mesh;
+	smoother.setInputMesh(triangles);
+	smoother.setNumIter(100); // 设置迭代次数
+	smoother.setConvergence(0.001); // 设置收敛标准
+	smoother.setRelaxationFactor(0.1); // 设置松弛因子
+	smoother.process(smoothed_mesh);
+
+	// 光顺不改变面片数
+	//polygonNums = smoothed_mesh.polygons.size();
+	//std::cout << "光顺后面片数：" << polygonNums << std::endl;
+#if ENABLE_DISPLAY
+	//----------------------------------结果可视化-----------------------------------
+	boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer(new pcl::visualization::PCLVisualizer("3D Viewer"));
+	viewer->setWindowName(u8"光顺后的模型");
+
+	viewer->addPolygonMesh(smoothed_mesh, "my");                 // 可视化模型重建结果
+	viewer->setRepresentationToSurfaceForAllActors();            // 网格模型以线框图模式显示
+	//viewer->addCoordinateSystem(0.2);
+	viewer->initCameraParameters();
+	viewer->spin();
+	while (!viewer->wasStopped())
+	{
+		viewer->spinOnce(100);
+		
+	}
+#endif
+
 	// 网格简化
 	vtkSmartPointer<vtkPolyData> vtkMesh;
-	pcl::VTKUtils::convertToVTK(triangles, vtkMesh);
+	pcl::VTKUtils::convertToVTK(smoothed_mesh, vtkMesh);
 
 	// 使用VTK的DecimatePro 进行简化
 	vtkSmartPointer<vtkDecimatePro> decimate = vtkSmartPointer<vtkDecimatePro>::New();
@@ -350,8 +390,7 @@ main(int argc, char** argv)
 
 #if ENABLE_DISPLAY
 	//----------------------------------结果可视化-----------------------------------
-	boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer(new pcl::visualization::PCLVisualizer("3D Viewer"));
-	viewer->setWindowName(u8"贪婪投影三角化");
+	viewer->setWindowName(u8"简化后的面片");
 	int v1(0), v2(0);
 	viewer->createViewPort(0, 0, 0.5, 1, v1);
 	viewer->createViewPort(0.5, 0, 1, 1, v2);
@@ -360,11 +399,12 @@ main(int argc, char** argv)
 	viewer->addPointCloud<pcl::PointXYZ>(cloud, "cloud", v1);	  // 可视化点云
 	viewer->addPolygonMesh(simplifiedMesh, "my", v2);             // 可视化模型重建结果
 	viewer->setRepresentationToSurfaceForAllActors();             // 网格模型以线框图模式显示
-
+	//viewer->initCameraParameters();
+	viewer->initCameraParameters();
+	viewer->spin();
 	while (!viewer->wasStopped())
 	{
 		viewer->spinOnce(100);
-		//boost::this_thread::sleep(boost::posix_time::microseconds(100000));
 	}
 #endif
 

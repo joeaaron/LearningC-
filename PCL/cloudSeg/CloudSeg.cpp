@@ -19,7 +19,9 @@
 using namespace std;
 
 Eigen::Vector3d normal;
+Eigen::Vector4d centroid;
 double D;
+double dThresh = 5; // 平面以上的点排除距离
 
 void SEGPlaneFit(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
 {
@@ -53,11 +55,24 @@ void SEGPlaneFit(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
 	normal.z() = coefficients[2];
 	
 	D = coefficients[3];
+
+	// Extract the inliers
+	pcl::PointCloud<pcl::PointXYZ>::Ptr plane_cloud(new pcl::PointCloud<pcl::PointXYZ>);
+	pcl::ExtractIndices<pcl::PointXYZ> extract;
+	extract.setInputCloud(cloud);
+	extract.setIndices(inliers);
+	extract.setNegative(false);
+	extract.filter(*plane_cloud);
+
+	// Calculate centroid of the plane
+	pcl::compute3DCentroid(*plane_cloud, centroid);
+	std::cout << "Centroid of the plane: " << centroid[0] << ", "
+		<< centroid[1] << ", "
+		<< centroid[2] << "\n";
 }
 
 void LeastSquareFit(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
 {
-	Eigen::Vector4d centroid;                    // 质心
 	Eigen::Matrix3d covariance_matrix;           // 协方差矩阵
 
 	// 计算归一化协方差矩阵和质心
@@ -86,6 +101,37 @@ void LeastSquareFit(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
 
 }
 
+bool IsPointAbovePlane(const Eigen::Vector3d& point, const Eigen::Vector4d& planeCoeff)
+{
+	Eigen::Vector3d normal = planeCoeff.head<3>();
+	double crossNorm = normal.stableNorm();
+	if (crossNorm < Eigen::NumTraits<double>::dummy_precision())
+	{
+		return false;
+	}
+
+	//double dCoeffD = planeCoeff[3];
+	return point.dot(normal) + D > 0;
+}
+
+double GetPointPlaneDis(const Eigen::Vector3d& point, const Eigen::Vector4d& planeCoeff)
+{
+	Eigen::Vector3d normal = planeCoeff.head<3>();
+	double crossNorm = normal.stableNorm();
+	if (crossNorm < Eigen::NumTraits<double>::dummy_precision())
+	{
+		return false;
+	}
+
+	/*double dCoeffD = planeCoeff[3];*/
+	double param = sqrt(planeCoeff[0] * planeCoeff[0] +
+		planeCoeff[1] * planeCoeff[1] +
+		planeCoeff[2] * planeCoeff[2]);
+
+	double dVal = fabs(point.dot(normal) + D) / param;
+	return dVal;
+}
+
 int
 main(int argc, char** argv)
 {
@@ -101,11 +147,11 @@ main(int argc, char** argv)
 	SEGPlaneFit(cloud);
 	auto endOp = std::chrono::high_resolution_clock::now();
 	std::chrono::duration<double> elapsedOp3 = endOp - startOp;
-	std::cout << "最小二乘平面拟合: " << elapsedOp3.count() << " seconds" << std::endl;
+	std::cout << "RANSAC平面拟合: " << elapsedOp3.count() << " seconds" << std::endl;
 
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloudModel(new pcl::PointCloud<pcl::PointXYZ>);
 
-	if (pcl::io::loadPCDFile<pcl::PointXYZ>("withModel.pcd", *cloudModel) == -1)		// sac_plane_test.pcd | Scan_0511_1713.pcd
+	if (pcl::io::loadPCDFile<pcl::PointXYZ>("model.pcd", *cloudModel) == -1)		// sac_plane_test.pcd | Scan_0511_1713.pcd
 	{
 		PCL_ERROR("点云读取失败 \n");
 		return (-1);
@@ -115,8 +161,20 @@ main(int argc, char** argv)
 	pcl::PointCloud<pcl::PointXYZ>::Ptr segCloud(new pcl::PointCloud<pcl::PointXYZ>);
 	for (int i = 0; i < cloudModel->size(); ++i)
 	{
-		Eigen::Vector3d point(cloudModel->points[i].x, cloudModel->points[i].y, cloudModel->points[i].z);
-		if ((point.dot(normal) + D) > 0)
+		//Eigen::Vector3d point(cloudModel->points[i].x,
+		//	cloudModel->points[i].y,
+		//	cloudModel->points[i].z);
+
+		//if (IsPointAbovePlane(point, centroid))
+		//{
+		//	segCloud->points.emplace_back(cloudModel->points[i]);
+		//}
+		Eigen::Vector3d point(cloudModel->points[i].x - centroid[0],
+			cloudModel->points[i].y - centroid[1],
+			cloudModel->points[i].z - centroid[2]);
+
+		double dDis = point.dot(normal);
+		if (dDis > dThresh)
 		{
 			segCloud->points.emplace_back(cloudModel->points[i]);
 		}
