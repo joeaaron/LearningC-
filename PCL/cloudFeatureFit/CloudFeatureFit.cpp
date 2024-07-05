@@ -19,7 +19,7 @@ main(int argc, char** argv)
 	//------------------------------读取点云数据---------------------------------
 	pcl::PointCloud<pcl::PointXYZ >::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ >);
 	pcl::PCDReader reader;
-	reader.read("data//table_scene_mug_stereo_textured.pcd", *cloud);
+	reader.read("table_scene_mug_stereo_textured.pcd", *cloud);
 	cout << "PointCloud has: " << cloud->points.size() << " data points." << endl;
 
 	//--------------------------------直通滤波-----------------------------------
@@ -133,7 +133,7 @@ main(int argc, char** argv)
 	while (!viewer->wasStopped())
 	{
 		viewer->spinOnce(100);
-		boost::this_thread::sleep(boost::posix_time::microseconds(10000));
+		//boost::this_thread::sleep(boost::posix_time::microseconds(10000));
 	}
 	return 0;
 }
