@@ -33,13 +33,13 @@ void PreprocessPointCloud(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
 	//sor.setStddevMulThresh(0.5);
 	//sor.filter(*cloud);
 
-	// 体素采样
+	// 均匀采样
 	//pcl::UniformSampling<pcl::PointXYZ> uniform;
 	//uniform.setInputCloud(cloud);
 	//uniform.setRadiusSearch(0.25);
 	//uniform.filter(*cloud);
 
-	// 均匀采样
+	// 体素采样
 	//pcl::VoxelGrid<pcl::PointXYZ> vg;
 	//vg.setInputCloud(cloud);
 	//vg.setLeafSize(0.25, 0.25, 0.25);

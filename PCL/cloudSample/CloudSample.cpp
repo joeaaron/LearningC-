@@ -1,19 +1,26 @@
 #include <iostream>
+#include <thread>
+#include <mutex>
+#include <chrono>
 
 #include <pcl/io/pcd_io.h>
 #include <pcl/point_types.h>
 #include <pcl/features/normal_3d_omp.h>
 #include <pcl/features/principal_curvatures.h>
+#include <pcl/console/print.h>
 #include <pcl/common/common.h>
 #include <pcl/console/time.h> 
 #include <pcl/visualization/pcl_visualizer.h>
-#include <thread>
-#include <mutex>
-#include <chrono>
+#include <pcl/filters/voxel_grid.h>
 
-#define ENABLE_DISPLAY 0		// 定义一个宏，用于控制显示状态
+#define ENABLE_DISPLAY 1					// 定义一个宏，用于控制显示状态
+#define ENABLE_TEST 0						// 定义一个宏，用于控制算法测试
+
 const float KEEP_PERCENTAGE = 15;
 const int TESTS_NUM = 10;
+
+using namespace pcl::io;
+using namespace pcl::console;
 
 // 定义结构体用于保存点云中每个点的索引和曲率
 struct PointCurvature
@@ -247,17 +254,69 @@ void CalCurvature3(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud)
 	CurvatureSample(curvatureValues, cloud);
 }
 
+void PCLVoxelSample(pcl::PointCloud<pcl::PointXYZ>::Ptr& sampledCloud, 
+	const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud)
+{
+	pcl::VoxelGrid<pcl::PointXYZ> vg;
+	vg.setInputCloud(cloud);
+	vg.setLeafSize(1, 1, 1);
+	vg.filter(*sampledCloud);
+}
+
+/**
+ * @description:			体素滤波
+ * @param cloud				输入点云
+ * @param cloud_filtered	滤波点云
+ * @param leafsize			体素大小
+ */
+void VoxelSample(pcl::PointCloud<pcl::PointXYZ>::Ptr& cloudSampled, 
+	const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloudIn, float leafsize)
+{
+	pcl::PointXYZ minPt, maxPt;
+	pcl::getMinMax3D(*cloudIn, minPt, maxPt);
+
+	float lx = maxPt.x - minPt.x;
+	float ly = maxPt.y - minPt.y;
+	float lz = maxPt.z - minPt.z;
+
+	int nx = static_cast<int>(std::ceil(lx / leafsize));
+	int ny = static_cast<int>(std::ceil(ly / leafsize));
+	int nz = static_cast<int>(std::ceil(lz / leafsize));
+
+	std::vector<pcl::PointCloud<pcl::PointXYZ>> v(nx * ny * nz);
+
+	for (int i = 0; i < cloudIn->points.size(); i++)
+	{
+		int ix = static_cast<int>(std::floor((cloudIn->points[i].x - minPt.x) / leafsize));
+		int iy = static_cast<int>(std::floor((cloudIn->points[i].y - minPt.y) / leafsize));
+		int iz = static_cast<int>(std::floor((cloudIn->points[i].z - minPt.z) / leafsize));
+
+		// 注意索引计算的修正
+		v[ix + iy * nx + iz * (nx * ny)].push_back(cloudIn->points[i]);
+	}
+
+	for (int i = 0; i < v.size(); ++i)
+	{
+		if (!v[i].empty())
+		{
+			Eigen::Vector4f centroid;
+			pcl::compute3DCentroid(v[i], centroid);
+			cloudSampled->push_back(pcl::PointXYZ(centroid.x(), centroid.y(), centroid.z()));
+		}
+	}
+}
+
 int main()
 {
 	// 加载点云数据
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
-	if (pcl::io::loadPCDFile<pcl::PointXYZ>("table_scene_lms400.pcd", *cloud) == -1)		// table_scene_lms400.pcd | rabbit.pcd | 800w
+	if (pcl::io::loadPCDFile<pcl::PointXYZ>("1600w.pcd", *cloud) == -1)		//
 	{
 		PCL_ERROR("点云读取失败 \n");
 		return (-1);
 	}
 
-	//pcl::console::TicToc time;
+	pcl::console::TicToc tt;
 	//time.tic();
 	//CalCurvature1(cloud);
 	//std::cout << "直接曲率采样用时： " << time.toc() / 1000 << " 秒" << std::endl;
@@ -265,11 +324,22 @@ int main()
 	//time.tic();
 	//CalCurvature2(cloud);
 	//std::cout << "高斯曲率采样用时： " << time.toc() / 1000 << " 秒" << std::endl;
-
+	//
 	//time.tic();
 	//CalCurvature3(cloud);
 	//std::cout << "多线程直接曲率采样用时： " << time.toc() / 1000 << " 秒" << std::endl;
+	//
+	
+	print_highlight("Sampling: "); 
+	print_value("%s ", "table_scene_lms400.pcd");
+	tt.tic();
+	pcl::PointCloud<pcl::PointXYZ>::Ptr sampledCloud(new pcl::PointCloud<pcl::PointXYZ>);
+	VoxelSample(sampledCloud, cloud, 1);
+	//PCLVoxelSample(sampledCloud, cloud);
+	//std::cout << "体素采样用时： " << time.toc() / 1000 << " 秒" << std::endl;
+	print_info("[done, "); print_value("%g", tt.toc()); print_info(" ms: "); print_value("%d", sampledCloud->width * sampledCloud->height); print_info(" points]\n");
 
+#if ENABLE_TEST
 	// 算法测试框架
 	std::vector<double> vTimes;
 	double dMaxTime = 0.0;
@@ -295,6 +365,30 @@ int main()
 
 	//std::cout << "高斯曲率采样平均用时： " << dAverageTime << "ms" << std::endl;
 	//std::cout << "高斯曲率采样最大用时： " << dMaxTime << " ms" << std::endl;
-	
+#endif	
+
+#if ENABLE_DISPLAY
+	boost::shared_ptr<pcl::visualization::PCLVisualizer> MView(new pcl::visualization::PCLVisualizer("Cloud Sample"));
+
+	int v1(0);
+	MView->createViewPort(0.0, 0.0, 0.5, 1.0, v1);
+	MView->setBackgroundColor(0.3, 0.3, 0.3, v1);
+	MView->addText("Raw point clouds", 10, 10, "v1_text", v1);
+
+	int v2(0);
+	MView->createViewPort(0.5, 0.0, 1, 1.0, v2);
+	MView->setBackgroundColor(0.5, 0.5, 0.5, v2);
+	MView->addText("Sampled point clouds", 10, 10, "v2_text", v2);
+
+	MView->addPointCloud<pcl::PointXYZ>(cloud, "Raw cloud", v1);
+	MView->addPointCloud<pcl::PointXYZ>(sampledCloud, "Sampled cloud", v2);
+
+	MView->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 1, 0, 0, "Raw cloud", v1);
+	MView->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 0, 1, 0, "Sampled cloud", v2);
+
+	MView->initCameraParameters();
+	MView->spin();
+#endif
+
 	return 0;
 }
