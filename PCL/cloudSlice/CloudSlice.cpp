@@ -6,32 +6,51 @@
 #include "string.h"  //字符库
 #include "stdlib.h"  //流函数库
 
+#define _USE_MATH_DEFINES
+#include <Eigen/Dense>
+#include <iostream>
+#include <cmath>
+
+using namespace Eigen;
+
 #define PNT_MAX  60000
+#define ROT_MATRIX_SIZE 3
+#define TRANSLATION_SIZE 3
 
-struct type_in_var {
-	float move_x, move_y, move_z;  //平移
-	float rot_x, rot_y, rot_z;   //旋转
-	double record_R5[4][4], record_T5[4];
-} in_var;
+// 假设存在一个结构体定义如下，用于存储线段的属性
+typedef struct {
+	double x, y;		// 线段端点的坐标
+	double r, g, b;		// 线段端点的颜色
+} LineSegment;
 
-struct type_buf {
+struct type_buf 
+{
 	float* PNT;    //存放点云
 	long int ct;   //点云计数
 	int cnt;
 
 	struct {
-		double line_x0, line_y0, line_r0, line_g0, line_b0;
-		double line_x1, line_y1, line_r1, line_g1, line_b1;
+		LineSegment lineSeg0;
+		LineSegment lineSeg1;
 		int line_m, line_n;
-		float x0, y0, z0, x1, y1, z1;
+		float x0, y0, z0;
+		float x1, y1, z1;
 	}slc[PNT_MAX];  //切片点云
 } buf;
 
+// 假设in_var是某种结构体，包含了旋转角度和平移值
+struct InVar 
+{
+	double rot_x, rot_y, rot_z;
+	double move_x, move_y, move_z;
+
+	Eigen::Matrix4d mtxR;
+	Eigen::Vector4d vecT;
+}inVar;
+
 void get_var(void);
 void input_stl_PNT(const char*, struct type_buf*);
-void rotate_stl_PNT(struct type_buf* pbuf);
 void compute_slc(double, struct type_buf*);
-void rotate_slc_pmt(double, struct type_buf* pbuf);
 void output_slc_pmt(struct type_buf*, const char* name);
 
 //***************************************************************
@@ -39,13 +58,13 @@ void output_slc_pmt(struct type_buf*, const char* name);
 void get_var(void)
 {
 	//平移量
-	in_var.move_x = 0;
-	in_var.move_y = 0;
-	in_var.move_z = 0;
+	inVar.move_x = 0;
+	inVar.move_y = 0;
+	inVar.move_z = 0;
 	//旋转量
-	in_var.rot_x = 0;
-	in_var.rot_y = 0;
-	in_var.rot_z = 0;
+	inVar.rot_x = 0;
+	inVar.rot_y = 0;
+	inVar.rot_z = 0;
 }
 
 //***************************************************************************
@@ -78,88 +97,72 @@ void input_stl_PNT(const char* name, struct type_buf* pbuf)
 	fclose(fid);
 }
 
-//***************************************************************************
-//坐标系旋转
-void rotate_stl_PNT(struct type_buf* pbuf)
+void RotatePnt(struct type_buf* pbuf)
 {
-	int i, j, k, kk, ct;
-	double x, p[4 + 1];
-	double pi, sin1, cos1, R1[4][4], R2[4][4], R3[4][4], R4[4][4];
-	double R5[4][4], T5[4];
-	float* PNT;
+	int ct = pbuf->ct;
+	float* PNT = pbuf->PNT;
 
-	PNT = pbuf->PNT;
-	ct = pbuf->ct;
+	// 摆放旋转平移
+	double sin_x = sin(inVar.rot_x * M_PI / 180);
+	double cos_x = cos(inVar.rot_x * M_PI / 180);
 
-	//摆放旋转平移
-	pi = 3.141592653589793;
+	// 定义旋转矩阵 R1, R2, R3
+	Matrix3d R1, R2, R3;
+	R1 << 1, 0, 0,
+		0, cos_x, -sin_x,
+		0, sin_x, cos_x;
 
-	sin1 = sin(in_var.rot_x * pi / 180);  cos1 = cos(in_var.rot_x * pi / 180);
-	R1[1][1] = 1;    R1[1][2] = 0;    R1[1][3] = 0;
-	R1[2][1] = 0;    R1[2][2] = cos1;    R1[2][3] = -sin1;
-	R1[3][1] = 0;    R1[3][2] = sin1;    R1[3][3] = cos1;
+	R2 << cos_x, 0, sin_x,
+		0, 1, 0,
+		-sin_x, 0, cos_x;
 
-	sin1 = sin(in_var.rot_y * pi / 180);  cos1 = cos(in_var.rot_y * pi / 180);
-	R2[1][1] = cos1;    R2[1][2] = 0;    R2[1][3] = sin1;
-	R2[2][1] = 0;    R2[2][2] = 1;    R2[2][3] = 0;
-	R2[3][1] = -sin1;    R2[3][2] = 0;    R2[3][3] = cos1;
+	R3 << cos_x, -sin_x, 0,
+		sin_x, cos_x, 0,
+		0, 0, 1;
 
-	sin1 = sin(in_var.rot_z * pi / 180);  cos1 = cos(in_var.rot_z * pi / 180);
-	R3[1][1] = cos1;    R3[1][2] = -sin1;    R3[1][3] = 0;
-	R3[2][1] = sin1;    R3[2][2] = cos1;    R3[2][3] = 0;
-	R3[3][1] = 0;    R3[3][2] = 0;    R3[3][3] = 1;
+	// 计算 R4 = R2 * R1, R5 = R3 * R4
+	Matrix3d R4 = R2 * R1;
+	Matrix3d R5 = R3 * R4;
 
-	for (i = 1; i <= 3; i++) {
-		for (j = 1; j <= 3; j++) {
-			x = 0;
-			for (k = 1; k <= 3; k++) {
-				x = x + R2[i][k] * R1[k][j];
-			}
-			R4[i][j] = x;
-		}
-	}
+	// 平移向量
+	Vector3d T5(inVar.move_x, inVar.move_y, inVar.move_z);
 
-	for (i = 1; i <= 3; i++) {
-		for (j = 1; j <= 3; j++) {
-			x = 0;
-			for (k = 1; k <= 3; k++) {
-				x = x + R3[i][k] * R4[k][j];
-			}
-			R5[i][j] = x;
-		}
-	}
-
-	//平移
-	T5[1] = in_var.move_x;
-	T5[2] = in_var.move_y;
-	T5[3] = in_var.move_z;
-
-	//旋转
-	for (kk = 1; kk <= ct; kk++) {
-		for (i = 0; i <= 3; i++) {
-			for (j = 1; j <= 3; j++) {
-				if (i == 0)  p[j] = PNT[kk * 12 + i * 3 + j];
-				if (i >= 1)  p[j] = PNT[kk * 12 + i * 3 + j];     //旋转中心在坐标系原点
+	// 旋转和平移点云
+	for (int kk = 0; kk < ct; kk++) 
+	{
+		for (int i = 0; i < 4; i++) 
+		{
+			Vector3d p;
+			for (int j = 0; j < 3; j++) 
+			{
+				p[j] = PNT[kk * 12 + i * 3 + j];
 			}
 
-			//点云旋转平移后的坐标 p2=R5*p1+T
-			for (j = 1; j <= 3; j++) {
-				x = 0;
-				for (k = 1; k <= 3; k++) {
-					x = x + R5[j][k] * p[k];
-				}
-				if (i == 0)  PNT[kk * 12 + i * 3 + j] = x;
-				if (i >= 1)  PNT[kk * 12 + i * 3 + j] = x + T5[j];
+			// 点云旋转平移后的坐标 p2 = R5 * p1 + T5
+			Vector3d transformed_p = R5 * p;
+			if (i > 0) 
+			{
+				transformed_p += T5;
+			}
+
+			for (int j = 0; j < 3; j++) {
+				PNT[kk * 12 + i * 3 + j] = transformed_p[j];
 			}
 		}
 	}
 
-	for (i = 1; i <= 3; i++) {
-		for (j = 1; j <= 3; j++) {
-			in_var.record_R5[i][j] = R5[i][j];
-		}
-		in_var.record_T5[i] = T5[i];
-	}
+	// 记录旋转矩阵和平移向量
+	Eigen::Matrix4d mat;
+	mat << 0, 0, 0, 0,
+		0, 1, 0, 0,
+		0, 0, 1, 0,
+		0, 0, 0, 1;
+	inVar.mtxR = mat;
+
+	Eigen::Vector4d vec;
+	vec.head<3>() = T5;
+	vec[3] = 0;
+	inVar.vecT = vec;
 }
 
 //******************************************************************
@@ -167,116 +170,144 @@ void rotate_stl_PNT(struct type_buf* pbuf)
 void compute_slc(double z9, struct type_buf* pbuf)
 {
 	int i, j, k, ct, cnt, dt, flag = 0, flag2 = 0, flagc;
-	double x1, y1, z1, x2, y2, z2, x3, y3, z3, x4, y4, xn, yn, zn, x9, y9;
 	float* PNT;
-	double  r, g, b, r1, g1, b1, r2, g2, b2, r3, g3, b3;
+
+	double x1, y1, z1;
+	double x2, y2, z2; 
+	double x3, y3, z3; 
+	double x4, y4;
+	double xn, yn, zn;
+	double x9, y9;
+	
+	double r, g, b;
+	double r1, g1, b1; 
+	double r2, g2, b2;
+	double r3, g3, b3;
 
 	PNT = pbuf->PNT;
 	ct = pbuf->ct;
 	cnt = 0;
-	//计算切片
-	for (k = 1; k <= ct; k++) {
-		if (cnt + 1 < PNT_MAX) {
 
+	//计算切片
+	for (k = 1; k <= ct; k++)
+	{
+		if (cnt + 1 < PNT_MAX) 
+		{
 			xn = PNT[k * 12 + 1]; yn = PNT[k * 12 + 2]; zn = PNT[k * 12 + 3];
 			x1 = PNT[k * 12 + 4]; y1 = PNT[k * 12 + 5]; z1 = PNT[k * 12 + 6];
 			x2 = PNT[k * 12 + 7]; y2 = PNT[k * 12 + 8]; z2 = PNT[k * 12 + 9];
 			x3 = PNT[k * 12 + 10]; y3 = PNT[k * 12 + 11]; z3 = PNT[k * 12 + 12];
 
-			r1 = 0; g1 = 0; b1 = 0; r2 = 0; g2 = 0; b2 = 0; r3 = 0; g3 = 0; b3 = 0;
+			r1 = 0; g1 = 0; b1 = 0; 
+			r2 = 0; g2 = 0; b2 = 0; 
+			r3 = 0; g3 = 0; b3 = 0;
+
 			//查找位置相临近的点坐标
 			flagc = 0;
-			if ((z1 >= z9 && z2 >= z9 && z3 >= z9) || (z1 <= z9 && z2 <= z9 && z3 <= z9)) {
+			if ((z1 >= z9 && z2 >= z9 && z3 >= z9) || (z1 <= z9 && z2 <= z9 && z3 <= z9)) 
+			{
 				if (z1 == z9 && z2 == z9 && z3 == z9) {}
-				else {
-					if (z1 == z9 && z2 == z9 && z3 > z9) {
+				else 
+				{
+					if (z1 == z9 && z2 == z9 && z3 > z9)
+					{
 						cnt = cnt + 1;  dt = 0;   flagc = 1;
-						pbuf->slc[cnt].line_x0 = x1;   pbuf->slc[cnt].line_y0 = y1;
-						pbuf->slc[cnt].line_r0 = r1;   pbuf->slc[cnt].line_g0 = g1;   pbuf->slc[cnt].line_b0 = b1;		dt = dt + 1;
-						pbuf->slc[cnt].line_x1 = x2;   pbuf->slc[cnt].line_y1 = y2;
-						pbuf->slc[cnt].line_r1 = r2;   pbuf->slc[cnt].line_g1 = g2;   pbuf->slc[cnt].line_b1 = b2;		dt = dt + 1;
-						pbuf->slc[cnt].line_m = 2;
+
+						// 计算线段的端点坐标和颜色
+						pbuf->slc[cnt].lineSeg0.x = x1;   pbuf->slc[cnt].lineSeg0.y = y1;
+						pbuf->slc[cnt].lineSeg0.r = r1;   pbuf->slc[cnt].lineSeg0.g = g1;   pbuf->slc[cnt].lineSeg0.b = b1;		dt = dt + 1;
+						pbuf->slc[cnt].lineSeg1.x = x2;   pbuf->slc[cnt].lineSeg1.y = y2;
+						pbuf->slc[cnt].lineSeg1.r = r2;   pbuf->slc[cnt].lineSeg1.g = g2;   pbuf->slc[cnt].lineSeg1.b = b2;		dt = dt + 1;
+					
 					}
-					if (z1 == z9 && z3 == z9 && z2 > z9) {
+					if (z1 == z9 && z3 == z9 && z2 > z9) 
+					{
 						cnt = cnt + 1;  dt = 0;   flagc = 1;
-						pbuf->slc[cnt].line_x0 = x1;   pbuf->slc[cnt].line_y0 = y1;
-						pbuf->slc[cnt].line_r0 = r1;   pbuf->slc[cnt].line_g0 = g1;   pbuf->slc[cnt].line_b0 = b1;		dt = dt + 1;
-						pbuf->slc[cnt].line_x1 = x3;   pbuf->slc[cnt].line_y1 = y3;
-						pbuf->slc[cnt].line_r1 = r3;   pbuf->slc[cnt].line_g1 = g3;   pbuf->slc[cnt].line_b1 = b3;		dt = dt + 1;
-						pbuf->slc[cnt].line_m = 2;
+						pbuf->slc[cnt].lineSeg0.x = x1;   pbuf->slc[cnt].lineSeg0.y = y1;
+						pbuf->slc[cnt].lineSeg0.r = r1;   pbuf->slc[cnt].lineSeg0.g = g1;   pbuf->slc[cnt].lineSeg0.b = b1;		dt = dt + 1;
+						pbuf->slc[cnt].lineSeg1.x = x3;   pbuf->slc[cnt].lineSeg1.y = y3;
+						pbuf->slc[cnt].lineSeg1.r = r3;   pbuf->slc[cnt].lineSeg1.g = g3;   pbuf->slc[cnt].lineSeg1.b = b3;		dt = dt + 1;
 					}
-					if (z3 == z9 && z2 == z9 && z1 > z9) {
+					if (z3 == z9 && z2 == z9 && z1 > z9) 
+					{
 						cnt = cnt + 1;  dt = 0;   flagc = 1;
-						pbuf->slc[cnt].line_x0 = x3;   pbuf->slc[cnt].line_y0 = y3;
-						pbuf->slc[cnt].line_r0 = r3;   pbuf->slc[cnt].line_g0 = g3;   pbuf->slc[cnt].line_b0 = b3;		dt = dt + 1;
-						pbuf->slc[cnt].line_x1 = x2;   pbuf->slc[cnt].line_y1 = y2;
-						pbuf->slc[cnt].line_r1 = r2;   pbuf->slc[cnt].line_g1 = g2;   pbuf->slc[cnt].line_b1 = b2;		dt = dt + 1;
-						pbuf->slc[cnt].line_m = 2;
+						pbuf->slc[cnt].lineSeg0.x = x3;   pbuf->slc[cnt].lineSeg0.y = y3;
+						pbuf->slc[cnt].lineSeg0.r = r3;   pbuf->slc[cnt].lineSeg0.g = g3;   pbuf->slc[cnt].lineSeg0.b = b3;		dt = dt + 1;
+						pbuf->slc[cnt].lineSeg1.x = x2;   pbuf->slc[cnt].lineSeg1.y = y2;
+						pbuf->slc[cnt].lineSeg1.r = r2;   pbuf->slc[cnt].lineSeg1.g = g2;   pbuf->slc[cnt].lineSeg1.b = b2;		dt = dt + 1;
 					}
+					pbuf->slc[cnt].line_m = 2;
 				}//else
 
 			}
-			else {  //对点进行比对后的删除
+			else 
+			{  //对点进行比对后的删除
 				cnt = cnt + 1;  dt = 0;   flagc = 1;
 
-				if ((z1 - z9) * (z2 - z9) < 0) {
+				if ((z1 - z9) * (z2 - z9) < 0) 
+				{
 					x9 = (z9 - z1) * (x2 - x1) / (z2 - z1) + x1;
 					y9 = (z9 - z1) * (y2 - y1) / (z2 - z1) + y1;
-					if (dt == 0) { pbuf->slc[cnt].line_x0 = x9;   pbuf->slc[cnt].line_y0 = y9; }
-					if (dt == 1) { pbuf->slc[cnt].line_x1 = x9;   pbuf->slc[cnt].line_y1 = y9; }
+					if (dt == 0) { pbuf->slc[cnt].lineSeg0.x = x9;   pbuf->slc[cnt].lineSeg0.y = y9; }
+					if (dt == 1) { pbuf->slc[cnt].lineSeg1.x = x9;   pbuf->slc[cnt].lineSeg1.y = y9; }
 					//
 					r = (z9 - z1) * (r2 - r1) / (z2 - z1) + r1;
 					g = (z9 - z1) * (g2 - g1) / (z2 - z1) + g1;
 					b = (z9 - z1) * (b2 - b1) / (z2 - z1) + b1;
-					if (dt == 0) { pbuf->slc[cnt].line_r0 = r;   pbuf->slc[cnt].line_g0 = g;   pbuf->slc[cnt].line_b0 = b; }
-					if (dt == 1) { pbuf->slc[cnt].line_r1 = r;   pbuf->slc[cnt].line_g1 = g;   pbuf->slc[cnt].line_b1 = b; }
+					if (dt == 0) { pbuf->slc[cnt].lineSeg0.r = r;   pbuf->slc[cnt].lineSeg0.g = g;   pbuf->slc[cnt].lineSeg0.b = b; }
+					if (dt == 1) { pbuf->slc[cnt].lineSeg1.r = r;   pbuf->slc[cnt].lineSeg1.g = g;   pbuf->slc[cnt].lineSeg1.b = b; }
 					dt = dt + 1;
 				}
-				if ((z1 - z9) * (z3 - z9) < 0) {
+				if ((z1 - z9) * (z3 - z9) < 0) 
+				{
 					x9 = (z9 - z1) * (x3 - x1) / (z3 - z1) + x1;
 					y9 = (z9 - z1) * (y3 - y1) / (z3 - z1) + y1;
-					if (dt == 0) { pbuf->slc[cnt].line_x0 = x9;   pbuf->slc[cnt].line_y0 = y9; }
-					if (dt == 1) { pbuf->slc[cnt].line_x1 = x9;   pbuf->slc[cnt].line_y1 = y9; }
+					if (dt == 0) { pbuf->slc[cnt].lineSeg0.x = x9;   pbuf->slc[cnt].lineSeg0.y = y9; }
+					if (dt == 1) { pbuf->slc[cnt].lineSeg1.x = x9;   pbuf->slc[cnt].lineSeg1.y = y9; }
 					//
 					r = (z9 - z1) * (r3 - r1) / (z3 - z1) + r1;
 					g = (z9 - z1) * (g3 - g1) / (z3 - z1) + g1;
 					b = (z9 - z1) * (b3 - b1) / (z3 - z1) + b1;
-					if (dt == 0) { pbuf->slc[cnt].line_r0 = r;   pbuf->slc[cnt].line_g0 = g;   pbuf->slc[cnt].line_b0 = b; }
-					if (dt == 1) { pbuf->slc[cnt].line_r1 = r;   pbuf->slc[cnt].line_g1 = g;   pbuf->slc[cnt].line_b1 = b; }
+					if (dt == 0) { pbuf->slc[cnt].lineSeg0.r = r;   pbuf->slc[cnt].lineSeg0.g = g;   pbuf->slc[cnt].lineSeg0.b = b; }
+					if (dt == 1) { pbuf->slc[cnt].lineSeg1.r = r;   pbuf->slc[cnt].lineSeg1.g = g;   pbuf->slc[cnt].lineSeg1.g = b; }
 					dt = dt + 1;
 				}
-				if ((z3 - z9) * (z2 - z9) < 0) {
+				if ((z3 - z9) * (z2 - z9) < 0) 
+				{
 					x9 = (z9 - z3) * (x2 - x3) / (z2 - z3) + x3;
 					y9 = (z9 - z3) * (y2 - y3) / (z2 - z3) + y3;
-					if (dt == 0) { pbuf->slc[cnt].line_x0 = x9;   pbuf->slc[cnt].line_y0 = y9; }
-					if (dt == 1) { pbuf->slc[cnt].line_x1 = x9;   pbuf->slc[cnt].line_y1 = y9; }
+					if (dt == 0) { pbuf->slc[cnt].lineSeg0.x = x9;   pbuf->slc[cnt].lineSeg0.y = y9; }
+					if (dt == 1) { pbuf->slc[cnt].lineSeg1.x = x9;   pbuf->slc[cnt].lineSeg1.y = y9; }
 					//
 					r = (z9 - z3) * (r2 - r3) / (z2 - z3) + r3;
 					g = (z9 - z3) * (g2 - g3) / (z2 - z3) + g3;
 					b = (z9 - z3) * (b2 - b3) / (z2 - z3) + b3;
-					if (dt == 0) { pbuf->slc[cnt].line_r0 = r;   pbuf->slc[cnt].line_g0 = g;   pbuf->slc[cnt].line_b0 = b; }
-					if (dt == 1) { pbuf->slc[cnt].line_r1 = r;   pbuf->slc[cnt].line_g1 = g;   pbuf->slc[cnt].line_b1 = b; }
+					if (dt == 0) { pbuf->slc[cnt].lineSeg0.r = r;   pbuf->slc[cnt].lineSeg0.g = g;   pbuf->slc[cnt].lineSeg0.b = b; }
+					if (dt == 1) { pbuf->slc[cnt].lineSeg1.r = r;   pbuf->slc[cnt].lineSeg1.g = g;   pbuf->slc[cnt].lineSeg1.b = b; }
 					dt = dt + 1;
 				}
-				if (z1 == z9 && (z3 - z9) * (z2 - z9) < 0) {
-					if (dt == 0) { pbuf->slc[cnt].line_x0 = x1;   pbuf->slc[cnt].line_y0 = y1; }
-					if (dt == 1) { pbuf->slc[cnt].line_x1 = x1;   pbuf->slc[cnt].line_y1 = y1; }
-					if (dt == 0) { pbuf->slc[cnt].line_r0 = r1;   pbuf->slc[cnt].line_g0 = g1;   pbuf->slc[cnt].line_b0 = b1; }
-					if (dt == 1) { pbuf->slc[cnt].line_r1 = r1;   pbuf->slc[cnt].line_g1 = g1;   pbuf->slc[cnt].line_b1 = b1; }
+				if (z1 == z9 && (z3 - z9) * (z2 - z9) < 0) 
+				{
+					if (dt == 0) { pbuf->slc[cnt].lineSeg0.x = x1;   pbuf->slc[cnt].lineSeg0.y = y1; }
+					if (dt == 1) { pbuf->slc[cnt].lineSeg1.x = x1;   pbuf->slc[cnt].lineSeg1.y = y1; }
+					if (dt == 0) { pbuf->slc[cnt].lineSeg0.r = r1;   pbuf->slc[cnt].lineSeg0.g = g1;   pbuf->slc[cnt].lineSeg0.b = b1; }
+					if (dt == 1) { pbuf->slc[cnt].lineSeg1.r = r1;   pbuf->slc[cnt].lineSeg1.g = g1;   pbuf->slc[cnt].lineSeg1.b = b1; }
 					dt = dt + 1;
 				}
-				if (z2 == z9 && (z1 - z9) * (z3 - z9) < 0) {
-					if (dt == 0) { pbuf->slc[cnt].line_x0 = x2;   pbuf->slc[cnt].line_y0 = y2; }
-					if (dt == 1) { pbuf->slc[cnt].line_x1 = x2;   pbuf->slc[cnt].line_y1 = y2; }
-					if (dt == 0) { pbuf->slc[cnt].line_r0 = r2;   pbuf->slc[cnt].line_g0 = g2;   pbuf->slc[cnt].line_b0 = b2; }
-					if (dt == 1) { pbuf->slc[cnt].line_r1 = r2;   pbuf->slc[cnt].line_g1 = g2;   pbuf->slc[cnt].line_b1 = b2; }
+				if (z2 == z9 && (z1 - z9) * (z3 - z9) < 0) 
+				{
+					if (dt == 0) { pbuf->slc[cnt].lineSeg0.x = x2;   pbuf->slc[cnt].lineSeg0.y = y2; }
+					if (dt == 1) { pbuf->slc[cnt].lineSeg1.x = x2;   pbuf->slc[cnt].lineSeg1.y = y2; }
+					if (dt == 0) { pbuf->slc[cnt].lineSeg0.r = r2;   pbuf->slc[cnt].lineSeg0.g = g2;   pbuf->slc[cnt].lineSeg0.b = b2; }
+					if (dt == 1) { pbuf->slc[cnt].lineSeg1.r = r2;   pbuf->slc[cnt].lineSeg1.g = g2;   pbuf->slc[cnt].lineSeg1.b = b2; }
 					dt = dt + 1;
 				}
-				if (z3 == z9 && (z1 - z9) * (z2 - z9) < 0) {
-					if (dt == 0) { pbuf->slc[cnt].line_x0 = x3;   pbuf->slc[cnt].line_y0 = y3; }
-					if (dt == 1) { pbuf->slc[cnt].line_x1 = x3;   pbuf->slc[cnt].line_y1 = y3; }
-					if (dt == 0) { pbuf->slc[cnt].line_r0 = r3;   pbuf->slc[cnt].line_g0 = g3;   pbuf->slc[cnt].line_b0 = b3; }
-					if (dt == 1) { pbuf->slc[cnt].line_r1 = r3;   pbuf->slc[cnt].line_g1 = g3;   pbuf->slc[cnt].line_b1 = b3; }
+				if (z3 == z9 && (z1 - z9) * (z2 - z9) < 0) 
+				{
+					if (dt == 0) { pbuf->slc[cnt].lineSeg0.x = x3;   pbuf->slc[cnt].lineSeg0.y = y3; }
+					if (dt == 1) { pbuf->slc[cnt].lineSeg1.x = x3;   pbuf->slc[cnt].lineSeg1.y = y3; }
+					if (dt == 0) { pbuf->slc[cnt].lineSeg0.r = r3;   pbuf->slc[cnt].lineSeg0.g = g3;   pbuf->slc[cnt].lineSeg0.b = b3; }
+					if (dt == 1) { pbuf->slc[cnt].lineSeg1.r = r3;   pbuf->slc[cnt].lineSeg1.g = g3;   pbuf->slc[cnt].lineSeg1.b = b3; }
 					dt = dt + 1;
 				}
 
@@ -284,10 +315,12 @@ void compute_slc(double z9, struct type_buf* pbuf)
 				if (dt < 2)  	flag = 1;
 				if (dt > 2)   flag2 = 1;
 			}
+
 			//计算切片点位置
-			if (flagc == 1) {
-				x1 = pbuf->slc[cnt].line_x0;   y1 = pbuf->slc[cnt].line_y0;
-				x2 = pbuf->slc[cnt].line_x1;   y2 = pbuf->slc[cnt].line_y1;
+			if (flagc == 1) 
+			{
+				x1 = pbuf->slc[cnt].lineSeg0.x;   y1 = pbuf->slc[cnt].lineSeg0.y;
+				x2 = pbuf->slc[cnt].lineSeg1.x;   y2 = pbuf->slc[cnt].lineSeg1.y;
 				x3 = x2 - x1;  y3 = y2 - y1;
 				if (xn * y3 - yn * x3 < 0)  pbuf->slc[cnt].line_n = -1;
 				else  pbuf->slc[cnt].line_n = 1;
@@ -298,29 +331,27 @@ void compute_slc(double z9, struct type_buf* pbuf)
 
 	//删除buf.line_m[cnt]=2;重复线段（都在上侧，两段线都删除）
 	//切线的两三角形在切平面的：1上下，2同侧，3一上一平，4两平    //上下选z>z9的三角形 
-	for (k = 1; k <= cnt - 1; k++) {
-		if (pbuf->slc[k].line_m == 2) {
+	for (k = 1; k <= cnt - 1; k++) 
+	{
+		if (pbuf->slc[k].line_m == 2) 
+		{
 			flag = 0;
-			x1 = pbuf->slc[k].line_x0;   y1 = pbuf->slc[k].line_y0;
-			x2 = pbuf->slc[k].line_x1;   y2 = pbuf->slc[k].line_y1;
-			for (i = k + 1; i <= cnt; i++) {
-				x3 = pbuf->slc[i].line_x0;   y3 = pbuf->slc[i].line_y0;
-				x4 = pbuf->slc[i].line_x1;   y4 = pbuf->slc[i].line_y1;
-				if ((x1 == x3 && x2 == x4 && y1 == y3 && y2 == y4) || (x2 == x3 && x1 == x4 && y2 == y3 && y1 == y4)) {
+			x1 = pbuf->slc[k].lineSeg0.x;   y1 = pbuf->slc[k].lineSeg0.y;
+			x2 = pbuf->slc[k].lineSeg1.x;   y2 = pbuf->slc[k].lineSeg1.y;
+
+			for (i = k + 1; i <= cnt; i++) 
+			{
+				x3 = pbuf->slc[i].lineSeg0.x;   y3 = pbuf->slc[i].lineSeg0.y;
+				x4 = pbuf->slc[i].lineSeg1.x;   y4 = pbuf->slc[i].lineSeg1.y;
+				if ((x1 == x3 && x2 == x4 && y1 == y3 && y2 == y4) 
+					|| (x2 == x3 && x1 == x4 && y2 == y3 && y1 == y4)) 
+				{
 					flag = 1;
 					//删除相同的
-					for (j = i + 1; j <= cnt; j++) {
-						pbuf->slc[j - 1].line_x0 = pbuf->slc[j].line_x0;
-						pbuf->slc[j - 1].line_y0 = pbuf->slc[j].line_y0;
-						pbuf->slc[j - 1].line_x1 = pbuf->slc[j].line_x1;
-						pbuf->slc[j - 1].line_y1 = pbuf->slc[j].line_y1;
-
-						pbuf->slc[j - 1].line_r0 = pbuf->slc[j].line_r0;
-						pbuf->slc[j - 1].line_g0 = pbuf->slc[j].line_g0;
-						pbuf->slc[j - 1].line_b0 = pbuf->slc[j].line_b0;
-						pbuf->slc[j - 1].line_r1 = pbuf->slc[j].line_r1;
-						pbuf->slc[j - 1].line_g1 = pbuf->slc[j].line_g1;
-						pbuf->slc[j - 1].line_b1 = pbuf->slc[j].line_b1;
+					for (j = i + 1; j <= cnt; j++) 
+					{
+						pbuf->slc[j - 1].lineSeg0 = pbuf->slc[j].lineSeg0;
+						pbuf->slc[j - 1].lineSeg1 = pbuf->slc[j].lineSeg1;
 
 						pbuf->slc[j - 1].line_n = pbuf->slc[j].line_n;
 						pbuf->slc[j - 1].line_m = pbuf->slc[j].line_m;
@@ -329,19 +360,12 @@ void compute_slc(double z9, struct type_buf* pbuf)
 				}
 			}
 			//同侧的两个线段都删除
-			if (flag == 1) {
-				for (j = k + 1; j <= cnt; j++) {
-					pbuf->slc[j - 1].line_x0 = pbuf->slc[j].line_x0;
-					pbuf->slc[j - 1].line_y0 = pbuf->slc[j].line_y0;
-					pbuf->slc[j - 1].line_x1 = pbuf->slc[j].line_x1;
-					pbuf->slc[j - 1].line_y1 = pbuf->slc[j].line_y1;
-
-					pbuf->slc[j - 1].line_r0 = pbuf->slc[j].line_r0;
-					pbuf->slc[j - 1].line_g0 = pbuf->slc[j].line_g0;
-					pbuf->slc[j - 1].line_b0 = pbuf->slc[j].line_b0;
-					pbuf->slc[j - 1].line_r1 = pbuf->slc[j].line_r1;
-					pbuf->slc[j - 1].line_g1 = pbuf->slc[j].line_g1;
-					pbuf->slc[j - 1].line_b1 = pbuf->slc[j].line_b1;
+			if (flag == 1) 
+			{
+				for (j = k + 1; j <= cnt; j++) 
+				{
+					pbuf->slc[j - 1].lineSeg0 = pbuf->slc[j].lineSeg0;
+					pbuf->slc[j - 1].lineSeg1 = pbuf->slc[j].lineSeg1;
 
 					pbuf->slc[j - 1].line_n = pbuf->slc[j].line_n;
 					pbuf->slc[j - 1].line_m = pbuf->slc[j].line_m;
@@ -354,56 +378,53 @@ void compute_slc(double z9, struct type_buf* pbuf)
 	pbuf->cnt = cnt;
 }
 
-//************************************************************
-//旋转切片点云
-void rotate_slc_pmt(double z, struct type_buf* pbuf)
+/**
+ * @brief 旋转 SLC 切片点
+ *
+ * 根据给定的旋转矩阵和平移向量，对 SLC 切片中的点进行旋转和平移操作。
+ *
+ * @param z 旋转平面的 Z 坐标
+ * @param pbuf SLC 切片数据的指针
+ */
+void RotateSlcPnt(double z, struct type_buf* pbuf)
 {
-	int i, j, k;
-	double x, p[4 + 1], q[4 + 1];
-	double R5[4][4], T5[4];
+	Eigen::Matrix3d R;
+	Eigen::Vector3d T;
 
-	//旋转矩阵
-	for (i = 1; i <= 3; i++) {
-		for (j = 1; j <= 3; j++) {
-			R5[i][j] = in_var.record_R5[i][j];
+	// 旋转矩阵
+	for (int i = 0; i < ROT_MATRIX_SIZE; i++) 
+	{
+		for (int j = 0; j < ROT_MATRIX_SIZE; j++) 
+		{
+			R(i, j) = inVar.mtxR(i + 1, j + 1); 
 		}
-		T5[i] = in_var.record_T5[i];
+		T(i) = inVar.vecT(i + 1); 
 	}
 
-	//旋转切片端点0
-	for (k = 1; k <= pbuf->cnt; k++) {
-		p[1] = pbuf->slc[k].line_x0 - T5[1];
-		p[2] = pbuf->slc[k].line_y0 - T5[2];
-		p[3] = z - T5[3];
-		//点云旋转平移后的坐标 p2=R5*p1+T,  逆变换p1=R5'*(p2-T)
-		for (i = 1; i <= 3; i++) {
-			x = 0;
-			for (j = 1; j <= 3; j++) {
-				x = x + R5[j][i] * p[j];
-			}
-			q[i] = x;
-		}
-		pbuf->slc[k].x0 = q[1];
-		pbuf->slc[k].y0 = q[2];
-		pbuf->slc[k].z0 = q[3];
-	}
+	// 辅助函数，对给定的点进行旋转和平移
+	auto rotateAndTranslate = [&](double x, double y, double& newX, double& newY, double& newZ) {
+		Eigen::Vector3d p(x, y, z);
+		Eigen::Vector3d q = R * (p - T) + T;
+		newX = q.x();
+		newY = q.y();
+		newZ = q.z();
+		};
 
-	//旋转切片端点1
-	for (k = 1; k <= pbuf->cnt; k++) {
-		p[1] = pbuf->slc[k].line_x1 - T5[1];
-		p[2] = pbuf->slc[k].line_y1 - T5[2];
-		p[3] = z - T5[3];
-		//点云旋转平移后的坐标 p2=R5*p1+T,  逆变换p1=R5'*(p2-T)
-		for (i = 1; i <= 3; i++) {
-			x = 0;
-			for (j = 1; j <= 3; j++) {
-				x = x + R5[j][i] * p[j];
-			}
-			q[i] = x;
-		}
-		pbuf->slc[k].x1 = q[1];
-		pbuf->slc[k].y1 = q[2];
-		pbuf->slc[k].z1 = q[3];
+	// 对切片端点0和1进行旋转和平移
+	for (int k = 0; k < pbuf->cnt; k++) 
+	{
+		double newX0, newY0, newZ0;
+		double newX1, newY1, newZ1;
+
+		rotateAndTranslate(pbuf->slc[k].lineSeg0.x, pbuf->slc[k].lineSeg0.y, newX0, newY0, newZ0);
+		pbuf->slc[k].x0 = static_cast<float>(newX0);
+		pbuf->slc[k].y0 = static_cast<float>(newY0);
+		pbuf->slc[k].z0 = static_cast<float>(newZ0);
+
+		rotateAndTranslate(pbuf->slc[k].lineSeg1.x, pbuf->slc[k].lineSeg1.y, newX1, newY1, newZ1);
+		pbuf->slc[k].x1 = static_cast<float>(newX1);
+		pbuf->slc[k].y1 = static_cast<float>(newY1);
+		pbuf->slc[k].z1 = static_cast<float>(newZ1);
 	}
 }
 
@@ -458,7 +479,7 @@ void main(void)
 	input_stl_PNT("test1.stl", &buf);
 
 	//旋转点云
-	rotate_stl_PNT(&buf);
+	RotatePnt(&buf);
 
 	//切片位置
 	double z = 6;
@@ -467,10 +488,10 @@ void main(void)
 	compute_slc(z, &buf);
 
 	//旋转切片结果
-	rotate_slc_pmt(z, &buf);
+	RotateSlcPnt(z, &buf);
 
 	//输出点云
-	output_slc_pmt(&buf, "E:\\test1.asc");
+	output_slc_pmt(&buf, "E:\\test3.asc");
 
 	//释放内存
 	free(buf.PNT);
