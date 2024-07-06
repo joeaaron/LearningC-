@@ -16,18 +16,45 @@ using namespace Eigen;
 #define PNT_MAX  60000
 #define ROT_MATRIX_SIZE 3
 #define TRANSLATION_SIZE 3
+#define PNT_STRIDE 12
 
 // 假设存在一个结构体定义如下，用于存储线段的属性
-typedef struct {
-	double x, y;		// 线段端点的坐标
-	double r, g, b;		// 线段端点的颜色
+typedef struct LineSegment 
+{
+	double x, y, z;					// 线段端点的坐标
+	double r = 0, g = 0, b = 0;		// 线段端点的颜色
+
+	LineSegment() {}
+	LineSegment(double dx, double dy, double dz, double dr, double dg, double db)
+	{
+		x = dx;
+		y = dy;
+		z = dz;
+		r = dr;
+		g = dg;
+		b = db;
+	}
+
+	LineSegment& operator=(const LineSegment& rhs)
+	{
+		if (this == &rhs) return *this;
+		x = rhs.x;
+		y = rhs.y;
+		z = rhs.z;
+		r = rhs.r;
+		g = rhs.g;
+		b = rhs.b;
+		
+		return *this;
+	}
+
 } LineSegment;
 
 struct type_buf 
 {
 	float* PNT;    //存放点云
-	long int ct;   //点云计数
-	int cnt;
+	long int ct;   //原始点云计数
+	int cnt;	   //切片点云计数
 
 	struct {
 		LineSegment lineSeg0;
@@ -86,12 +113,12 @@ void input_stl_PNT(const char* name, struct type_buf* pbuf)
 	PNT2 = 0;
 
 	//申请内存
-	pbuf->PNT = (float*)malloc(((ct + 1) * 12 + 1) * sizeof(float));
+	pbuf->PNT = (float*)malloc(((ct + 1) * PNT_STRIDE + 1) * sizeof(float));
 	pbuf->ct = ct;
 
 	for (k = 1; k <= ct; k++) {
-		for (j = 1; j <= 12; j++)
-			fread(&pbuf->PNT[k * 12 + j], sizeof(float), 1, fid);
+		for (j = 1; j <= PNT_STRIDE; j++)
+			fread(&pbuf->PNT[k * PNT_STRIDE + j], sizeof(float), 1, fid);
 		fread(&PNT2, sizeof(short int), 1, fid);
 	}
 	fclose(fid);
@@ -135,7 +162,7 @@ void RotatePnt(struct type_buf* pbuf)
 			Vector3d p;
 			for (int j = 0; j < 3; j++) 
 			{
-				p[j] = PNT[kk * 12 + i * 3 + j];
+				p[j] = PNT[kk * PNT_STRIDE + i * 3 + j];
 			}
 
 			// 点云旋转平移后的坐标 p2 = R5 * p1 + T5
@@ -146,7 +173,7 @@ void RotatePnt(struct type_buf* pbuf)
 			}
 
 			for (int j = 0; j < 3; j++) {
-				PNT[kk * 12 + i * 3 + j] = transformed_p[j];
+				PNT[kk * PNT_STRIDE + i * 3 + j] = transformed_p[j];
 			}
 		}
 	}
@@ -165,212 +192,195 @@ void RotatePnt(struct type_buf* pbuf)
 	inVar.vecT = vec;
 }
 
+// 函数用于计算线段的端点坐标和颜色
+void CalLineSeg(LineSegment& lineSegOut, double z9, const LineSegment& lineSeg1, const LineSegment& lineSeg2)
+{
+	double dCoef1 = z9 - lineSeg1.z;
+	double dCoef2 = lineSeg2.z - lineSeg1.z;
+
+	lineSegOut.x = dCoef1 * (lineSeg2.x - lineSeg1.x) / dCoef2 + lineSeg1.x;
+	lineSegOut.y = dCoef1 * (lineSeg2.y - lineSeg1.y) / dCoef2 + lineSeg1.y;
+	lineSegOut.r = dCoef1 * (lineSeg2.r - lineSeg1.r) / dCoef2 + lineSeg1.r;
+	lineSegOut.g = dCoef1 * (lineSeg2.g - lineSeg1.g) / dCoef2 + lineSeg1.g;
+	lineSegOut.b = dCoef1 * (lineSeg2.b - lineSeg1.b) / dCoef2 + lineSeg1.b;
+}
+
+bool IsSegmentEqual(const LineSegment& lineSeg1, const LineSegment& lineSeg2,
+	const LineSegment& slcLineSeg0, const LineSegment& slcLineSeg1)
+{
+	return (lineSeg1.x == slcLineSeg0.x && lineSeg2.x == slcLineSeg1.x && lineSeg1.y == slcLineSeg0.y && lineSeg2.y == slcLineSeg1.y)
+		|| (lineSeg2.x == slcLineSeg0.x && lineSeg1.x == slcLineSeg1.x && lineSeg2.y == slcLineSeg0.y && lineSeg1.y == slcLineSeg1.y);
+}
 //******************************************************************
 //计算切片
 void compute_slc(double z9, struct type_buf* pbuf)
 {
-	int i, j, k, ct, cnt, dt, flag = 0, flag2 = 0, flagc;
-	float* PNT;
+	float* PNT = pbuf->PNT;
+	int ct = pbuf->ct;
+	int cnt = 0;
 
-	double x1, y1, z1;
-	double x2, y2, z2; 
-	double x3, y3, z3; 
-	double x4, y4;
-	double xn, yn, zn;
-	double x9, y9;
-	
-	double r, g, b;
-	double r1, g1, b1; 
-	double r2, g2, b2;
-	double r3, g3, b3;
+	int dt = 0;
+	bool flagSameSide = false;
 
-	PNT = pbuf->PNT;
-	ct = pbuf->ct;
-	cnt = 0;
+	LineSegment lineSeg1;
+	LineSegment lineSeg2;
+	LineSegment lineSeg3;
 
 	//计算切片
-	for (k = 1; k <= ct; k++)
+	for (int k = 1; k <= ct && cnt + 1 < PNT_MAX; k++)
 	{
-		if (cnt + 1 < PNT_MAX) 
-		{
-			xn = PNT[k * 12 + 1]; yn = PNT[k * 12 + 2]; zn = PNT[k * 12 + 3];
-			x1 = PNT[k * 12 + 4]; y1 = PNT[k * 12 + 5]; z1 = PNT[k * 12 + 6];
-			x2 = PNT[k * 12 + 7]; y2 = PNT[k * 12 + 8]; z2 = PNT[k * 12 + 9];
-			x3 = PNT[k * 12 + 10]; y3 = PNT[k * 12 + 11]; z3 = PNT[k * 12 + 12];
+		// 提取当前点和相邻两点的坐标
+		double xn = pbuf->PNT[k * PNT_STRIDE + 1];
+		double yn = pbuf->PNT[k * PNT_STRIDE + 2];
+		double zn = pbuf->PNT[k * PNT_STRIDE + 3];
 
-			r1 = 0; g1 = 0; b1 = 0; 
-			r2 = 0; g2 = 0; b2 = 0; 
-			r3 = 0; g3 = 0; b3 = 0;
+		lineSeg1.x = PNT[k * PNT_STRIDE + 4]; lineSeg1.y = PNT[k * PNT_STRIDE + 5]; lineSeg1.z = PNT[k * PNT_STRIDE + 6];
+		lineSeg2.x = PNT[k * PNT_STRIDE + 7]; lineSeg2.y = PNT[k * PNT_STRIDE + 8]; lineSeg2.z = PNT[k * PNT_STRIDE + 9];
+		lineSeg3.x = PNT[k * PNT_STRIDE + 10]; lineSeg3.y = PNT[k * PNT_STRIDE + 11]; lineSeg3.z = PNT[k * PNT_STRIDE + PNT_STRIDE];
 
-			//查找位置相临近的点坐标
-			flagc = 0;
-			if ((z1 >= z9 && z2 >= z9 && z3 >= z9) || (z1 <= z9 && z2 <= z9 && z3 <= z9)) 
+		//查找位置相临近的点坐标
+		if (lineSeg1.z == z9 && lineSeg2.z == z9 && lineSeg3.z == z9) { continue; }
+		bool flagRelated = false;
+		if ((lineSeg1.z >= z9 && lineSeg2.z >= z9 && lineSeg3.z >= z9) 
+			|| (lineSeg1.z <= z9 && lineSeg2.z <= z9 && lineSeg3.z <= z9))
+		{	
+			if (lineSeg1.z == z9 && lineSeg2.z == z9 && lineSeg3.z > z9)
 			{
-				if (z1 == z9 && z2 == z9 && z3 == z9) {}
-				else 
-				{
-					if (z1 == z9 && z2 == z9 && z3 > z9)
-					{
-						cnt = cnt + 1;  dt = 0;   flagc = 1;
-
-						// 计算线段的端点坐标和颜色
-						pbuf->slc[cnt].lineSeg0.x = x1;   pbuf->slc[cnt].lineSeg0.y = y1;
-						pbuf->slc[cnt].lineSeg0.r = r1;   pbuf->slc[cnt].lineSeg0.g = g1;   pbuf->slc[cnt].lineSeg0.b = b1;		dt = dt + 1;
-						pbuf->slc[cnt].lineSeg1.x = x2;   pbuf->slc[cnt].lineSeg1.y = y2;
-						pbuf->slc[cnt].lineSeg1.r = r2;   pbuf->slc[cnt].lineSeg1.g = g2;   pbuf->slc[cnt].lineSeg1.b = b2;		dt = dt + 1;
+				cnt = cnt + 1;  dt = 0;   flagRelated = true;
+				pbuf->slc[cnt].lineSeg0 = lineSeg1;
+				dt += 1;
+				pbuf->slc[cnt].lineSeg1 = lineSeg2;
+				dt += 1;
 					
-					}
-					if (z1 == z9 && z3 == z9 && z2 > z9) 
-					{
-						cnt = cnt + 1;  dt = 0;   flagc = 1;
-						pbuf->slc[cnt].lineSeg0.x = x1;   pbuf->slc[cnt].lineSeg0.y = y1;
-						pbuf->slc[cnt].lineSeg0.r = r1;   pbuf->slc[cnt].lineSeg0.g = g1;   pbuf->slc[cnt].lineSeg0.b = b1;		dt = dt + 1;
-						pbuf->slc[cnt].lineSeg1.x = x3;   pbuf->slc[cnt].lineSeg1.y = y3;
-						pbuf->slc[cnt].lineSeg1.r = r3;   pbuf->slc[cnt].lineSeg1.g = g3;   pbuf->slc[cnt].lineSeg1.b = b3;		dt = dt + 1;
-					}
-					if (z3 == z9 && z2 == z9 && z1 > z9) 
-					{
-						cnt = cnt + 1;  dt = 0;   flagc = 1;
-						pbuf->slc[cnt].lineSeg0.x = x3;   pbuf->slc[cnt].lineSeg0.y = y3;
-						pbuf->slc[cnt].lineSeg0.r = r3;   pbuf->slc[cnt].lineSeg0.g = g3;   pbuf->slc[cnt].lineSeg0.b = b3;		dt = dt + 1;
-						pbuf->slc[cnt].lineSeg1.x = x2;   pbuf->slc[cnt].lineSeg1.y = y2;
-						pbuf->slc[cnt].lineSeg1.r = r2;   pbuf->slc[cnt].lineSeg1.g = g2;   pbuf->slc[cnt].lineSeg1.b = b2;		dt = dt + 1;
-					}
-					pbuf->slc[cnt].line_m = 2;
-				}//else
-
 			}
-			else 
-			{  //对点进行比对后的删除
-				cnt = cnt + 1;  dt = 0;   flagc = 1;
-
-				if ((z1 - z9) * (z2 - z9) < 0) 
-				{
-					x9 = (z9 - z1) * (x2 - x1) / (z2 - z1) + x1;
-					y9 = (z9 - z1) * (y2 - y1) / (z2 - z1) + y1;
-					if (dt == 0) { pbuf->slc[cnt].lineSeg0.x = x9;   pbuf->slc[cnt].lineSeg0.y = y9; }
-					if (dt == 1) { pbuf->slc[cnt].lineSeg1.x = x9;   pbuf->slc[cnt].lineSeg1.y = y9; }
-					//
-					r = (z9 - z1) * (r2 - r1) / (z2 - z1) + r1;
-					g = (z9 - z1) * (g2 - g1) / (z2 - z1) + g1;
-					b = (z9 - z1) * (b2 - b1) / (z2 - z1) + b1;
-					if (dt == 0) { pbuf->slc[cnt].lineSeg0.r = r;   pbuf->slc[cnt].lineSeg0.g = g;   pbuf->slc[cnt].lineSeg0.b = b; }
-					if (dt == 1) { pbuf->slc[cnt].lineSeg1.r = r;   pbuf->slc[cnt].lineSeg1.g = g;   pbuf->slc[cnt].lineSeg1.b = b; }
-					dt = dt + 1;
-				}
-				if ((z1 - z9) * (z3 - z9) < 0) 
-				{
-					x9 = (z9 - z1) * (x3 - x1) / (z3 - z1) + x1;
-					y9 = (z9 - z1) * (y3 - y1) / (z3 - z1) + y1;
-					if (dt == 0) { pbuf->slc[cnt].lineSeg0.x = x9;   pbuf->slc[cnt].lineSeg0.y = y9; }
-					if (dt == 1) { pbuf->slc[cnt].lineSeg1.x = x9;   pbuf->slc[cnt].lineSeg1.y = y9; }
-					//
-					r = (z9 - z1) * (r3 - r1) / (z3 - z1) + r1;
-					g = (z9 - z1) * (g3 - g1) / (z3 - z1) + g1;
-					b = (z9 - z1) * (b3 - b1) / (z3 - z1) + b1;
-					if (dt == 0) { pbuf->slc[cnt].lineSeg0.r = r;   pbuf->slc[cnt].lineSeg0.g = g;   pbuf->slc[cnt].lineSeg0.b = b; }
-					if (dt == 1) { pbuf->slc[cnt].lineSeg1.r = r;   pbuf->slc[cnt].lineSeg1.g = g;   pbuf->slc[cnt].lineSeg1.g = b; }
-					dt = dt + 1;
-				}
-				if ((z3 - z9) * (z2 - z9) < 0) 
-				{
-					x9 = (z9 - z3) * (x2 - x3) / (z2 - z3) + x3;
-					y9 = (z9 - z3) * (y2 - y3) / (z2 - z3) + y3;
-					if (dt == 0) { pbuf->slc[cnt].lineSeg0.x = x9;   pbuf->slc[cnt].lineSeg0.y = y9; }
-					if (dt == 1) { pbuf->slc[cnt].lineSeg1.x = x9;   pbuf->slc[cnt].lineSeg1.y = y9; }
-					//
-					r = (z9 - z3) * (r2 - r3) / (z2 - z3) + r3;
-					g = (z9 - z3) * (g2 - g3) / (z2 - z3) + g3;
-					b = (z9 - z3) * (b2 - b3) / (z2 - z3) + b3;
-					if (dt == 0) { pbuf->slc[cnt].lineSeg0.r = r;   pbuf->slc[cnt].lineSeg0.g = g;   pbuf->slc[cnt].lineSeg0.b = b; }
-					if (dt == 1) { pbuf->slc[cnt].lineSeg1.r = r;   pbuf->slc[cnt].lineSeg1.g = g;   pbuf->slc[cnt].lineSeg1.b = b; }
-					dt = dt + 1;
-				}
-				if (z1 == z9 && (z3 - z9) * (z2 - z9) < 0) 
-				{
-					if (dt == 0) { pbuf->slc[cnt].lineSeg0.x = x1;   pbuf->slc[cnt].lineSeg0.y = y1; }
-					if (dt == 1) { pbuf->slc[cnt].lineSeg1.x = x1;   pbuf->slc[cnt].lineSeg1.y = y1; }
-					if (dt == 0) { pbuf->slc[cnt].lineSeg0.r = r1;   pbuf->slc[cnt].lineSeg0.g = g1;   pbuf->slc[cnt].lineSeg0.b = b1; }
-					if (dt == 1) { pbuf->slc[cnt].lineSeg1.r = r1;   pbuf->slc[cnt].lineSeg1.g = g1;   pbuf->slc[cnt].lineSeg1.b = b1; }
-					dt = dt + 1;
-				}
-				if (z2 == z9 && (z1 - z9) * (z3 - z9) < 0) 
-				{
-					if (dt == 0) { pbuf->slc[cnt].lineSeg0.x = x2;   pbuf->slc[cnt].lineSeg0.y = y2; }
-					if (dt == 1) { pbuf->slc[cnt].lineSeg1.x = x2;   pbuf->slc[cnt].lineSeg1.y = y2; }
-					if (dt == 0) { pbuf->slc[cnt].lineSeg0.r = r2;   pbuf->slc[cnt].lineSeg0.g = g2;   pbuf->slc[cnt].lineSeg0.b = b2; }
-					if (dt == 1) { pbuf->slc[cnt].lineSeg1.r = r2;   pbuf->slc[cnt].lineSeg1.g = g2;   pbuf->slc[cnt].lineSeg1.b = b2; }
-					dt = dt + 1;
-				}
-				if (z3 == z9 && (z1 - z9) * (z2 - z9) < 0) 
-				{
-					if (dt == 0) { pbuf->slc[cnt].lineSeg0.x = x3;   pbuf->slc[cnt].lineSeg0.y = y3; }
-					if (dt == 1) { pbuf->slc[cnt].lineSeg1.x = x3;   pbuf->slc[cnt].lineSeg1.y = y3; }
-					if (dt == 0) { pbuf->slc[cnt].lineSeg0.r = r3;   pbuf->slc[cnt].lineSeg0.g = g3;   pbuf->slc[cnt].lineSeg0.b = b3; }
-					if (dt == 1) { pbuf->slc[cnt].lineSeg1.r = r3;   pbuf->slc[cnt].lineSeg1.g = g3;   pbuf->slc[cnt].lineSeg1.b = b3; }
-					dt = dt + 1;
-				}
-
-				pbuf->slc[cnt].line_m = 1;
-				if (dt < 2)  	flag = 1;
-				if (dt > 2)   flag2 = 1;
-			}
-
-			//计算切片点位置
-			if (flagc == 1) 
+			if (lineSeg1.z == z9 && lineSeg3.z == z9 && lineSeg2.z > z9)
 			{
-				x1 = pbuf->slc[cnt].lineSeg0.x;   y1 = pbuf->slc[cnt].lineSeg0.y;
-				x2 = pbuf->slc[cnt].lineSeg1.x;   y2 = pbuf->slc[cnt].lineSeg1.y;
-				x3 = x2 - x1;  y3 = y2 - y1;
-				if (xn * y3 - yn * x3 < 0)  pbuf->slc[cnt].line_n = -1;
-				else  pbuf->slc[cnt].line_n = 1;
+				cnt = cnt + 1;  dt = 0;   flagRelated = true;
+				pbuf->slc[cnt].lineSeg0 = lineSeg1;
+				dt += 1;
+				pbuf->slc[cnt].lineSeg1 = lineSeg3;
+				dt += 1;
+			}
+			if (lineSeg3.z == z9 && lineSeg2.z == z9 && lineSeg1.z > z9)
+			{
+				cnt = cnt + 1;  dt = 0;   flagRelated = true;
+
+				pbuf->slc[cnt].lineSeg0 = lineSeg3;
+				dt += 1;
+				pbuf->slc[cnt].lineSeg1 = lineSeg2;
+				dt += 1;
+			}
+			pbuf->slc[cnt].line_m = 2;
+		}
+		else 
+		{  
+			//对点进行比对后的删除
+			cnt = cnt + 1;  dt = 0;   flagRelated = true;
+			LineSegment lineSegOut;
+
+			if ((lineSeg1.z - z9) * (lineSeg2.z - z9) < 0)
+			{
+				CalLineSeg(lineSegOut, z9, lineSeg1, lineSeg2);
+			
+				if (dt == 0) { pbuf->slc[cnt].lineSeg0 = lineSegOut; }
+				if (dt == 1) { pbuf->slc[cnt].lineSeg1 = lineSegOut; }
+
+				dt = dt + 1;
+			}
+			if ((lineSeg1.z - z9) * (lineSeg3.z - z9) < 0)
+			{
+				CalLineSeg(lineSegOut, z9, lineSeg1, lineSeg3);
+
+				if (dt == 0) { pbuf->slc[cnt].lineSeg0 = lineSegOut; }
+				if (dt == 1) { pbuf->slc[cnt].lineSeg1 = lineSegOut; }
+
+				dt = dt + 1;
+			}
+			if ((lineSeg3.z - z9) * (lineSeg2.z - z9) < 0)
+			{		
+				CalLineSeg(lineSegOut, z9, lineSeg3, lineSeg2);
+
+				if (dt == 0) { pbuf->slc[cnt].lineSeg0 = lineSegOut; }
+				if (dt == 1) { pbuf->slc[cnt].lineSeg1 = lineSegOut; }
+
+				dt = dt + 1;
+			}
+			if (lineSeg1.z == z9 && (lineSeg3.z - z9) * (lineSeg2.z - z9) < 0)
+			{
+				if (dt == 0) { pbuf->slc[cnt].lineSeg0 = lineSeg1; }
+				if (dt == 1) { pbuf->slc[cnt].lineSeg1 = lineSeg1; }
+
+				dt = dt + 1;
+			}
+			if (lineSeg2.z == z9 && (lineSeg1.z - z9) * (lineSeg3.z - z9) < 0)
+			{
+				if (dt == 0) { pbuf->slc[cnt].lineSeg0 = lineSeg2; }
+				if (dt == 1) { pbuf->slc[cnt].lineSeg1 = lineSeg2; }
+
+				dt = dt + 1;
+			}
+			if (lineSeg3.z == z9 && (lineSeg1.z - z9) * (lineSeg2.z - z9) < 0)
+			{
+				if (dt == 0) { pbuf->slc[cnt].lineSeg0 = lineSeg3; }
+				if (dt == 1) { pbuf->slc[cnt].lineSeg1 = lineSeg3; }
+
+				dt = dt + 1;
 			}
 
+			pbuf->slc[cnt].line_m = 1;
+			if (dt < 2)   flagSameSide = true;
+		}
+
+		//计算切片点位置
+		if (flagRelated)
+		{
+			lineSeg1.x = pbuf->slc[cnt].lineSeg0.x;   lineSeg1.y = pbuf->slc[cnt].lineSeg0.y;
+			lineSeg2.x = pbuf->slc[cnt].lineSeg1.x;   lineSeg2.y = pbuf->slc[cnt].lineSeg1.y;
+			lineSeg3.x = lineSeg2.x - lineSeg1.x;     lineSeg3.y = lineSeg2.y - lineSeg1.y;
+
+			if (xn * lineSeg3.y - yn * lineSeg3.x < 0)
+			{
+				pbuf->slc[cnt].line_n = -1;
+			}	
+			else
+			{
+				pbuf->slc[cnt].line_n = 1;
+			}
 		}
 	}
 
 	//删除buf.line_m[cnt]=2;重复线段（都在上侧，两段线都删除）
-	//切线的两三角形在切平面的：1上下，2同侧，3一上一平，4两平    //上下选z>z9的三角形 
-	for (k = 1; k <= cnt - 1; k++) 
+	//切线的两三角形在切平面的：1上下，2同侧，3一上一平，4两平    
+	//上下选z>z9的三角形 
+	for (int k = 1; k <= cnt - 1; k++)
 	{
-		if (pbuf->slc[k].line_m == 2) 
+		if (pbuf->slc[k].line_m == 2)
 		{
-			flag = 0;
-			x1 = pbuf->slc[k].lineSeg0.x;   y1 = pbuf->slc[k].lineSeg0.y;
-			x2 = pbuf->slc[k].lineSeg1.x;   y2 = pbuf->slc[k].lineSeg1.y;
+			flagSameSide = false;
+			lineSeg1 = pbuf->slc[k].lineSeg0;
+			lineSeg2 = pbuf->slc[k].lineSeg1;
 
-			for (i = k + 1; i <= cnt; i++) 
-			{
-				x3 = pbuf->slc[i].lineSeg0.x;   y3 = pbuf->slc[i].lineSeg0.y;
-				x4 = pbuf->slc[i].lineSeg1.x;   y4 = pbuf->slc[i].lineSeg1.y;
-				if ((x1 == x3 && x2 == x4 && y1 == y3 && y2 == y4) 
-					|| (x2 == x3 && x1 == x4 && y2 == y3 && y1 == y4)) 
+			for (int i = k + 1; i <= cnt; i++)
+			{		
+				if (IsSegmentEqual(lineSeg1, lineSeg2, pbuf->slc[i].lineSeg0, pbuf->slc[i].lineSeg1))
 				{
-					flag = 1;
-					//删除相同的
-					for (j = i + 1; j <= cnt; j++) 
-					{
-						pbuf->slc[j - 1].lineSeg0 = pbuf->slc[j].lineSeg0;
-						pbuf->slc[j - 1].lineSeg1 = pbuf->slc[j].lineSeg1;
+					flagSameSide = true;
 
-						pbuf->slc[j - 1].line_n = pbuf->slc[j].line_n;
-						pbuf->slc[j - 1].line_m = pbuf->slc[j].line_m;
+					for (int j = i; j <= cnt - 1; j++)
+					{
+						pbuf->slc[j] = pbuf->slc[j + 1]; // 向前移动线段
 					}
-					cnt = cnt - 1;
+					--cnt; // 减少计数
 				}
 			}
 			//同侧的两个线段都删除
-			if (flag == 1) 
+			if (flagSameSide)
 			{
-				for (j = k + 1; j <= cnt; j++) 
+				for (int j = k; j <= cnt - 1; j++)
 				{
-					pbuf->slc[j - 1].lineSeg0 = pbuf->slc[j].lineSeg0;
-					pbuf->slc[j - 1].lineSeg1 = pbuf->slc[j].lineSeg1;
-
-					pbuf->slc[j - 1].line_n = pbuf->slc[j].line_n;
-					pbuf->slc[j - 1].line_m = pbuf->slc[j].line_m;
+					pbuf->slc[j] = pbuf->slc[j + 1]; // 向前移动线段
 				}
-				cnt = cnt - 1;
+				--cnt;
 			}
 		}
 	}
