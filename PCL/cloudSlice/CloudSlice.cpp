@@ -11,6 +11,12 @@
 #include <iostream>
 #include <cmath>
 
+#undef min
+#undef max
+
+#include <pcl/PolygonMesh.h>
+#include <pcl/io/vtk_lib_io.h>
+
 using namespace Eigen;
 
 #define PNT_MAX  60000
@@ -60,12 +66,12 @@ struct type_buf
 		LineSegment lineSeg0;
 		LineSegment lineSeg1;
 		int line_m, line_n;
-		float x0, y0, z0;
-		float x1, y1, z1;
+		float x0, y0, z0;		// 切面端点0
+		float x1, y1, z1;		// 切面端点1
 	}slc[PNT_MAX];  //切片点云
 } buf;
 
-// 假设in_var是某种结构体，包含了旋转角度和平移值
+// 假设inVar是某种结构体，包含了旋转角度和平移值
 struct InVar 
 {
 	double rot_x, rot_y, rot_z;
@@ -100,14 +106,13 @@ void input_stl_PNT(const char* name, struct type_buf* pbuf)
 {
 	short int PNT2;
 	float PNT1[80 + 1];
-	int i, j, k;
 	long int ct;
 	FILE* fid;
 
 	if ((fid = fopen(name, "rb")) == NULL) {
 		printf("模型文件打开错误");   return;
 	}
-	for (i = 1; i <= 20; i++)  PNT1[i] = 0;
+	for (int i = 1; i <= 20; i++)  PNT1[i] = 0;
 	fread(&PNT1[1], sizeof(float), 20, fid);
 	fread(&ct, sizeof(long int), 1, fid);
 	PNT2 = 0;
@@ -116,18 +121,58 @@ void input_stl_PNT(const char* name, struct type_buf* pbuf)
 	pbuf->PNT = (float*)malloc(((ct + 1) * PNT_STRIDE + 1) * sizeof(float));
 	pbuf->ct = ct;
 
-	for (k = 1; k <= ct; k++) {
-		for (j = 1; j <= PNT_STRIDE; j++)
+	for (int k = 1; k <= ct; k++) 
+	{
+		for (int j = 1; j <= PNT_STRIDE; j++)
 			fread(&pbuf->PNT[k * PNT_STRIDE + j], sizeof(float), 1, fid);
 		fread(&PNT2, sizeof(short int), 1, fid);
 	}
 	fclose(fid);
 }
 
+//void STL2Point(const std::string& name, struct type_buf* pbuf)
+//{
+//	std::ifstream fid(name, std::ios::binary);
+//	if (!fid.is_open()) {
+//		throw std::runtime_error("模型文件打开错误");
+//	}
+//
+//	// 假设文件前20个float是固定数据，这里仅读取而不处理
+//	std::vector<float> temp(20);
+//	fid.read(reinterpret_cast<char*>(temp.data()), temp.size() * sizeof(float));
+//	if (!fid) {
+//		throw std::runtime_error("读取固定数据失败");
+//	}
+//
+//	// 读取点云数量
+//	fid.read(reinterpret_cast<char*>(&pbuf->ct), sizeof(pbuf->ct));
+//	if (!fid) {
+//		throw std::runtime_error("读取点云数量失败");
+//	}
+//
+//	// 分配内存并读取点云数据
+//	pbuf->PNT.resize(pbuf->ct * PNT_STRIDE);
+//	for (long int k = 0; k < pbuf->ct; ++k) {
+//		fid.read(reinterpret_cast<char*>(&pbuf->PNT[k * PNT_STRIDE]), PNT_STRIDE * sizeof(float));
+//		if (!fid) {
+//			throw std::runtime_error("读取点云数据失败");
+//		}
+//
+//		// 假设文件中每个点云数据后都有一个short int，这里仅读取而不处理
+//		short int PNT2;
+//		fid.read(reinterpret_cast<char*>(&PNT2), sizeof(PNT2));
+//		if (!fid) {
+//			throw std::runtime_error("读取short int失败");
+//		}
+//	}
+//
+//	fid.close(); // 或者使用RAII，让ifstream对象在离开作用域时自动关闭
+//}
+
 void RotatePnt(struct type_buf* pbuf)
 {
 	int ct = pbuf->ct;
-	float* PNT = pbuf->PNT;
+	auto PNT = pbuf->PNT;
 
 	// 摆放旋转平移
 	double sin_x = sin(inVar.rot_x * M_PI / 180);
@@ -205,6 +250,7 @@ void CalLineSeg(LineSegment& lineSegOut, double z9, const LineSegment& lineSeg1,
 	lineSegOut.b = dCoef1 * (lineSeg2.b - lineSeg1.b) / dCoef2 + lineSeg1.b;
 }
 
+// 两个线段具有相同的两个端点
 bool IsSegmentEqual(const LineSegment& lineSeg1, const LineSegment& lineSeg2,
 	const LineSegment& slcLineSeg0, const LineSegment& slcLineSeg1)
 {
@@ -212,15 +258,19 @@ bool IsSegmentEqual(const LineSegment& lineSeg1, const LineSegment& lineSeg2,
 		|| (lineSeg2.x == slcLineSeg0.x && lineSeg1.x == slcLineSeg1.x && lineSeg2.y == slcLineSeg0.y && lineSeg1.y == slcLineSeg1.y);
 }
 //******************************************************************
-//计算切片
-void compute_slc(double z9, struct type_buf* pbuf)
+/**
+ * @brief 计算切片
+ *
+ * 根据给定的 z 值（z9）和缓冲区（pbuf）中的数据，计算切片并存储在 pbuf 的 slc 数组中。
+ *
+ * @param z9 切片的 z 值
+ * @param pbuf 缓冲区结构体指针，包含点坐标和其他信息
+ */
+void ComputeSlc(double z9, struct type_buf* pbuf)
 {
-	float* PNT = pbuf->PNT;
+	auto PNT = pbuf->PNT;
 	int ct = pbuf->ct;
 	int cnt = 0;
-
-	int dt = 0;
-	bool flagSameSide = false;
 
 	LineSegment lineSeg1;
 	LineSegment lineSeg2;
@@ -241,6 +291,10 @@ void compute_slc(double z9, struct type_buf* pbuf)
 		//查找位置相临近的点坐标
 		if (lineSeg1.z == z9 && lineSeg2.z == z9 && lineSeg3.z == z9) { continue; }
 		bool flagRelated = false;
+		int dt = 0;
+
+		// 如果三个相邻点都在z9平面的同侧（即都大于或都小于z9），则进一步检查是否有一个或两个点在z9平面上。
+		// 如果是，则将这些线段存储在pbuf->slc中。
 		if ((lineSeg1.z >= z9 && lineSeg2.z >= z9 && lineSeg3.z >= z9) 
 			|| (lineSeg1.z <= z9 && lineSeg2.z <= z9 && lineSeg3.z <= z9))
 		{	
@@ -248,30 +302,30 @@ void compute_slc(double z9, struct type_buf* pbuf)
 			{
 				cnt = cnt + 1;  dt = 0;   flagRelated = true;
 				pbuf->slc[cnt].lineSeg0 = lineSeg1;
-				dt += 1;
+				dt++;
 				pbuf->slc[cnt].lineSeg1 = lineSeg2;
-				dt += 1;
+				dt++;
 					
 			}
 			if (lineSeg1.z == z9 && lineSeg3.z == z9 && lineSeg2.z > z9)
 			{
 				cnt = cnt + 1;  dt = 0;   flagRelated = true;
 				pbuf->slc[cnt].lineSeg0 = lineSeg1;
-				dt += 1;
+				dt++;
 				pbuf->slc[cnt].lineSeg1 = lineSeg3;
-				dt += 1;
+				dt++;
 			}
 			if (lineSeg3.z == z9 && lineSeg2.z == z9 && lineSeg1.z > z9)
 			{
 				cnt = cnt + 1;  dt = 0;   flagRelated = true;
-
 				pbuf->slc[cnt].lineSeg0 = lineSeg3;
-				dt += 1;
+				dt++;
 				pbuf->slc[cnt].lineSeg1 = lineSeg2;
-				dt += 1;
+				dt++;
 			}
 			pbuf->slc[cnt].line_m = 2;
 		}
+		// 如果三个相邻点不在z9平面的同侧，则计算与z9平面相交的线段，并将其存储在pbuf->slc中。
 		else 
 		{  
 			//对点进行比对后的删除
@@ -285,7 +339,7 @@ void compute_slc(double z9, struct type_buf* pbuf)
 				if (dt == 0) { pbuf->slc[cnt].lineSeg0 = lineSegOut; }
 				if (dt == 1) { pbuf->slc[cnt].lineSeg1 = lineSegOut; }
 
-				dt = dt + 1;
+				dt++;
 			}
 			if ((lineSeg1.z - z9) * (lineSeg3.z - z9) < 0)
 			{
@@ -294,7 +348,7 @@ void compute_slc(double z9, struct type_buf* pbuf)
 				if (dt == 0) { pbuf->slc[cnt].lineSeg0 = lineSegOut; }
 				if (dt == 1) { pbuf->slc[cnt].lineSeg1 = lineSegOut; }
 
-				dt = dt + 1;
+				dt++;
 			}
 			if ((lineSeg3.z - z9) * (lineSeg2.z - z9) < 0)
 			{		
@@ -303,40 +357,41 @@ void compute_slc(double z9, struct type_buf* pbuf)
 				if (dt == 0) { pbuf->slc[cnt].lineSeg0 = lineSegOut; }
 				if (dt == 1) { pbuf->slc[cnt].lineSeg1 = lineSegOut; }
 
-				dt = dt + 1;
+				dt++;
 			}
 			if (lineSeg1.z == z9 && (lineSeg3.z - z9) * (lineSeg2.z - z9) < 0)
 			{
 				if (dt == 0) { pbuf->slc[cnt].lineSeg0 = lineSeg1; }
 				if (dt == 1) { pbuf->slc[cnt].lineSeg1 = lineSeg1; }
 
-				dt = dt + 1;
+				dt++;
 			}
 			if (lineSeg2.z == z9 && (lineSeg1.z - z9) * (lineSeg3.z - z9) < 0)
 			{
 				if (dt == 0) { pbuf->slc[cnt].lineSeg0 = lineSeg2; }
 				if (dt == 1) { pbuf->slc[cnt].lineSeg1 = lineSeg2; }
 
-				dt = dt + 1;
+				dt++;
 			}
 			if (lineSeg3.z == z9 && (lineSeg1.z - z9) * (lineSeg2.z - z9) < 0)
 			{
 				if (dt == 0) { pbuf->slc[cnt].lineSeg0 = lineSeg3; }
 				if (dt == 1) { pbuf->slc[cnt].lineSeg1 = lineSeg3; }
 
-				dt = dt + 1;
+				dt++;
 			}
 
 			pbuf->slc[cnt].line_m = 1;
-			if (dt < 2)   flagSameSide = true;
+			/*if (dt < 2)   flagSameSide = true;*/
 		}
 
-		//计算切片点位置
+		//计算切片点位置：对于每个与z9平面相交的线段，确定其在切片平面上的方向（基于当前点和线段的方向）。
 		if (flagRelated)
 		{
-			lineSeg1.x = pbuf->slc[cnt].lineSeg0.x;   lineSeg1.y = pbuf->slc[cnt].lineSeg0.y;
-			lineSeg2.x = pbuf->slc[cnt].lineSeg1.x;   lineSeg2.y = pbuf->slc[cnt].lineSeg1.y;
-			lineSeg3.x = lineSeg2.x - lineSeg1.x;     lineSeg3.y = lineSeg2.y - lineSeg1.y;
+			lineSeg1 = pbuf->slc[cnt].lineSeg0;
+			lineSeg2 = pbuf->slc[cnt].lineSeg1;
+			lineSeg3.x = lineSeg2.x - lineSeg1.x;     
+			lineSeg3.y = lineSeg2.y - lineSeg1.y;
 
 			if (xn * lineSeg3.y - yn * lineSeg3.x < 0)
 			{
@@ -356,7 +411,7 @@ void compute_slc(double z9, struct type_buf* pbuf)
 	{
 		if (pbuf->slc[k].line_m == 2)
 		{
-			flagSameSide = false;
+			bool flagSameSide = false;
 			lineSeg1 = pbuf->slc[k].lineSeg0;
 			lineSeg2 = pbuf->slc[k].lineSeg1;
 
@@ -385,6 +440,7 @@ void compute_slc(double z9, struct type_buf* pbuf)
 		}
 	}
 
+	// 更新pbuf->cnt以反映存储在pbuf->slc中的线段数量
 	pbuf->cnt = cnt;
 }
 
@@ -485,8 +541,19 @@ void main(void)
 	//输入参数
 	get_var();
 
+	// 创建一个pcl::PolygonMesh对象
+	pcl::PolygonMesh::Ptr mesh(new pcl::PolygonMesh);
+
+	// 加载STL文件
+	if (pcl::io::loadPolygonFileSTL("test1.stl", *mesh) == -1) {
+		return ;
+	}
+
+	//PclPolygonToBuf(&buf, *mesh);
+
 	//输入STL格式
 	input_stl_PNT("test1.stl", &buf);
+	//STL2Point("test1.stl", &buf);
 
 	//旋转点云
 	RotatePnt(&buf);
@@ -495,7 +562,7 @@ void main(void)
 	double z = 6;
 
 	//切片结果到buf
-	compute_slc(z, &buf);
+	ComputeSlc(z, &buf);
 
 	//旋转切片结果
 	RotateSlcPnt(z, &buf);
@@ -504,7 +571,7 @@ void main(void)
 	output_slc_pmt(&buf, "E:\\test3.asc");
 
 	//释放内存
-	free(buf.PNT);
+	//free(buf.PNT);
 }
 
 
