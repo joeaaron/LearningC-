@@ -18,13 +18,13 @@ namespace
 	 */
 	void RotateCloud(SliceBuf* pBuf)
 	{
-		if (pBuf == nullptr || pBuf->pCloud == nullptr)
+		if (pBuf == nullptr || pBuf->pCloud.empty())
 		{
 			return;
 		}
 
 		long lCloudNum = pBuf->lCloudNum;
-		float* pCloud = pBuf->pCloud;
+		auto pCloud = pBuf->pCloud;
 
 		// °Ú·ÅÐý×ªÆ½ÒÆ
 		double sinX = sin(transData.rotX * M_PI / 180);
@@ -138,12 +138,12 @@ namespace
 	 */
 	void ComputeSlc(SliceBuf* pBuf, double dSlicePos)
 	{
-		if (pBuf == nullptr || pBuf->pCloud == nullptr)
+		if (pBuf == nullptr || pBuf->pCloud.empty())
 		{
 			return;
 		}
 
-		float* pCloud = pBuf->pCloud;
+		auto pCloud = pBuf->pCloud;
 		long lCloudNum = pBuf->lCloudNum;
 		int nCnt = 0;
 
@@ -382,7 +382,7 @@ void PCL_Slice::SetSlicePos(double dSlicePos)
 
 bool PCL_Slice::Execute(pcl::PointCloud<pcl::PointXYZ>::Ptr& pCloudOut, SliceBuf* pBuf)
 {
-	if (pBuf == nullptr || pBuf->pCloud == nullptr)
+	if (pBuf == nullptr || pBuf->pCloud.empty())
 	{
 		m_eMessage = em3DCloudSliceMessage::eMessageBadData;
 		return false;

@@ -51,9 +51,9 @@ typedef struct SliceCloudBuf
 		int nLineA, nLineB;
 	}slc[PCL_SLICE_POINT_NUM];			// 切片点云
 
-	float* pCloud;						// 存放点云
+	std::vector<float> pCloud;			// 存放点云
 	long   lCloudNum;					// 点云计数
-	int	   nCnt;
+	int	   nCnt;						// 切片点云计数
 }SliceBuf;
 
 typedef struct TransformData
