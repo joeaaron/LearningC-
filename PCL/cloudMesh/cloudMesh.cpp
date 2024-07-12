@@ -27,17 +27,17 @@
 void PreprocessPointCloud(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
 {
 	// 统计滤波
-	//pcl::StatisticalOutlierRemoval<pcl::PointXYZ> sor;
-	//sor.setInputCloud(cloud);
-	//sor.setMeanK(10);
-	//sor.setStddevMulThresh(0.5);
-	//sor.filter(*cloud);
+	pcl::StatisticalOutlierRemoval<pcl::PointXYZ> sor;
+	sor.setInputCloud(cloud);
+	sor.setMeanK(10);
+	sor.setStddevMulThresh(0.5);
+	sor.filter(*cloud);
 
 	// 均匀采样
-	//pcl::UniformSampling<pcl::PointXYZ> uniform;
-	//uniform.setInputCloud(cloud);
-	//uniform.setRadiusSearch(0.25);
-	//uniform.filter(*cloud);
+	pcl::UniformSampling<pcl::PointXYZ> uniform;
+	uniform.setInputCloud(cloud);
+	uniform.setRadiusSearch(0.25);
+	uniform.filter(*cloud);
 
 	// 体素采样
 	//pcl::VoxelGrid<pcl::PointXYZ> vg;
@@ -324,7 +324,18 @@ main(int argc, char** argv)
 	//PossionTriangle(triangles, cloud, cloud_with_normals);				// 泊松重建
 	//GridTriangle(triangles, cloud, cloud_with_normals);					// 网格投影曲面重建
 	//MarchingCubesTriangles(triangles, cloud, cloud_with_normals);			// 移动立方体
+	std::string output_filename = "output_mesh.stl";
 
+	// 保存为 STL 文件
+	if (pcl::io::savePolygonFileSTL(output_filename, *triangles) == 0)
+	{
+		std::cout << "Successfully saved mesh to " << output_filename << std::endl;
+	}
+	else
+	{
+		std::cerr << "Failed to save mesh to " << output_filename << std::endl;
+		return -1;
+	}
 	// -----------------------------读取mesh数据-------------------------------
 	//pcl::PolygonMesh::Ptr mesh(new pcl::PolygonMesh);
 	//if (pcl::io::loadPolygonFileVTK("tum_rabbit.vtk", *mesh) == -1)			// tum_rabbit.vtk | sphere.vtk"
