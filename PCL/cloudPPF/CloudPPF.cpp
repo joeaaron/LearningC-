@@ -12,7 +12,7 @@
 #include <pcl/common/common.h>
 #include <pcl/common/transforms.h>
 #include <pcl/segmentation/sac_segmentation.h>
-
+#include <pcl/console/time.h> 
 #include <vtkPolyDataMapper.h>
 #include <vtkPolyData.h>
 #include <vtkTriangle.h>
@@ -23,7 +23,7 @@
 #include "MyPPFRegistration.hpp"
 
 const int SAMPLE_POINTS = 1000000;
-const int LEAF_SIZE = 0.0005f;
+const float LEAF_SIZE = 0.005f;
 
 bool bCalNormal = true;
 bool bCalColor = false;
@@ -337,8 +337,10 @@ int main()
 		return (-1);
 	}
 
-	std::cout << "Step 1: Load STL file and perform point sampling from each view" << std::endl;
+	pcl::console::TicToc time;
+	time.tic();
 
+	std::cout << "Step 1: Load STL file and perform point sampling from each view" << std::endl;
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloudSampled(new pcl::PointCloud<pcl::PointXYZ>());
 	Mesh2Cloud(*cloudSampled, mesh);
 
@@ -499,6 +501,7 @@ int main()
 
 		Eigen::Matrix4f transform = verified_results[results_i].pose.matrix();
 	}
+	cout << "PPF算法用时： " << time.toc() / 1000 << " 秒" << endl;
 
 #if ENABLE_DISPLAY
 	boost::shared_ptr<pcl::visualization::PCLVisualizer>viewer(new pcl::visualization::PCLVisualizer(u8"显示点云"));
