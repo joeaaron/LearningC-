@@ -53,8 +53,8 @@ main(int argc, char** argv)
 	seg.setOptimizeCoefficients(true);
 	seg.setModelType(pcl::SACMODEL_CONE);
 	seg.setMethodType(pcl::SAC_RANSAC);
-	seg.setMaxIterations(1000);
-	seg.setDistanceThreshold(0.1); // Adjust according to your dataset(影响拟合点数)
+	seg.setMaxIterations(100000);
+	seg.setDistanceThreshold(5); // Adjust according to your dataset(影响拟合点数)
 
 	// Segment the largest cone from the cloud
 	seg.setInputCloud(cloud);
@@ -66,6 +66,7 @@ main(int argc, char** argv)
 		return -1;
 	}
 
+	// 从RANSAC结果中提取初始参数
 	pcl::ExtractIndices<pcl::PointXYZ > extract;
 	extract.setInputCloud(cloud);
 	extract.setIndices(inliers);

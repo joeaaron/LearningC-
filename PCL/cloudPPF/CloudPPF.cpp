@@ -23,7 +23,8 @@
 #include "MyPPFRegistration.hpp"
 
 const int SAMPLE_POINTS = 1000000;
-const float LEAF_SIZE = 0.005f;
+const float MODEL_LEAF_SIZE = 1.0f;
+const float SCENE_LEAF_SIZE = 0.001f;
 
 bool bCalNormal = true;
 bool bCalColor = false;
@@ -186,7 +187,7 @@ bool Mesh2Cloud(pcl::PointCloud<pcl::PointXYZ>& cloudOut,
 	// Voxelgrid
 	pcl::VoxelGrid<pcl::PointXYZRGBNormal> grid;
 	grid.setInputCloud(cloudAll);
-	grid.setLeafSize(LEAF_SIZE, LEAF_SIZE, LEAF_SIZE);
+	grid.setLeafSize(MODEL_LEAF_SIZE, MODEL_LEAF_SIZE, MODEL_LEAF_SIZE);
 
 	pcl::PointCloud<pcl::PointXYZRGBNormal>::Ptr voxel_cloud(new pcl::PointCloud<pcl::PointXYZRGBNormal>);
 	grid.filter(*voxel_cloud);
@@ -323,7 +324,7 @@ int main()
 {
 	//Load model
 	pcl::PolygonMesh mesh;
-	if (pcl::io::loadPolygonFileSTL("model.STL", mesh) == -1)
+	if (pcl::io::loadPolygonFileSTL("Prismatic002.stl", mesh) == -1)		//Prismatic002.stl model.STL
 	{
 		PCL_ERROR("STL∂¡»° ß∞‹ \n");
 		return (-1);
@@ -331,7 +332,7 @@ int main()
 
 	//Load scene
 	pcl::PointCloud<pcl::PointXYZRGBA>::Ptr cloudScene(new pcl::PointCloud<pcl::PointXYZRGBA>);
-	if (pcl::io::loadPCDFile<pcl::PointXYZRGBA>("scene.pcd", *cloudScene) == -1) //* load the file
+	if (pcl::io::loadPCDFile<pcl::PointXYZRGBA>("Prismatic002.pcd", *cloudScene) == -1) //* load the file Prismatic002.pcd scene.pcd
 	{
 		PCL_ERROR("Couldn't read file\n");
 		return (-1);
@@ -413,7 +414,7 @@ int main()
 	pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
 	ne.setInputCloud(model_keypoints);
 	ne.setSearchSurface(cloudModel);
-	ne.setNumberOfThreads(8);
+	ne.setNumberOfThreads(4);
 	ne.setSearchMethod(tree);
 	ne.setRadiusSearch(norm_rad);
 	ne.compute(*normals);
@@ -450,7 +451,7 @@ int main()
 	pcl::PointCloud<pcl::PointXYZ>::Ptr scene_keypoints = pcl::PointCloud<pcl::PointXYZ>::Ptr(new pcl::PointCloud<pcl::PointXYZ>());
 	pcl::VoxelGrid<pcl::PointXYZ> vg_;
 	vg_.setInputCloud(segmentedScene);
-	vg_.setLeafSize(0.001f, 0.001f, 0.001f);
+	vg_.setLeafSize(SCENE_LEAF_SIZE, SCENE_LEAF_SIZE, SCENE_LEAF_SIZE);
 	vg_.setDownsampleAllData(true);
 	vg_.filter(*scene_keypoints);
 	StatisticalOutlinerRemoval(scene_keypoints, 50, scene_keypoints);// 50 k-neighbors noise removal
@@ -469,7 +470,7 @@ int main()
 	// Calculate all the normals of the entire surface
 	sceneNe.setInputCloud(scene_keypoints);
 	sceneNe.setSearchSurface(segmentedScene);
-	sceneNe.setNumberOfThreads(8);
+	sceneNe.setNumberOfThreads(4);
 	sceneNe.setSearchMethod(sceneTree);
 	sceneNe.setRadiusSearch(norm_rad);
 	sceneNe.compute(*sceneNormals);

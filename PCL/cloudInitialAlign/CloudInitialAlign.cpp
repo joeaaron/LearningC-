@@ -11,12 +11,13 @@
 #include <pcl/registration/ppf_registration.h>
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/registration/icp.h>
+#include <pcl/io/vtk_lib_io.h>
 #include <boost/thread/thread.hpp>
 
 using namespace std;
 
 #define ENABLE_DISPLAY 1					// 定义一个宏，用于控制显示状态
-
+const double LEAF_SIZE = 1;
 typedef pcl::PointCloud<pcl::PointXYZ> pointcloud;
 typedef pcl::PointCloud<pcl::Normal> pointnormal;
 typedef pcl::PointCloud<pcl::FPFHSignature33> fpfhFeature;
@@ -63,7 +64,7 @@ ComputeFPFH(const pointcloud::Ptr& srcCloud, const pointcloud::Ptr& dstCloud, bo
 	trans->estimateRigidTransformation(*srcCloud, *dstCloud, *cru_correspondences, Transform);
 
 	cout << "变换矩阵为：\n" << Transform << endl;
-	cout << "FPFH配准算法用时：" << time.toc() / 1000 << " 秒" << endl;
+	cout << "预对齐算法用时：" << time.toc() / 1000 << " 秒" << endl;
 
 #if ENABLE_DISPLAY
 	pcl::transformPointCloud(*srcCloud, *srcCloud, Transform);
@@ -142,30 +143,70 @@ ComputePPF(const pointcloud::Ptr& srcCloud,
 	std::cout << "Transformation Matrix: \n" << transformation << std::endl;
 }
 
+bool Mesh2CloudPCL(pcl::PointCloud<pcl::PointXYZ>& cloudOut,
+	const pcl::PolygonMesh& mesh)
+{
+	pcl::fromPCLPointCloud2(mesh.cloud, cloudOut);
+	return true;
+}
+
 int
 main(int argc, char** argv)
 {
-	pointcloud::Ptr source_cloud(new pointcloud);
-	pointcloud::Ptr target_cloud(new pointcloud);
+	/*pointcloud::Ptr source_cloud(new pointcloud);
+	pointcloud::Ptr target_cloud(new pointcloud);*/
 
-	pcl::io::loadPCDFile<pcl::PointXYZ>("pig_view1.pcd", *source_cloud);
-	pcl::io::loadPCDFile<pcl::PointXYZ>("pig_view2.pcd", *target_cloud);
+	/*pcl::io::loadPCDFile<pcl::PointXYZ>("pig_view1.pcd", *source_cloud);
+	pcl::io::loadPCDFile<pcl::PointXYZ>("pig_view2.pcd", *target_cloud);*/
 
-	cout << "点云点数：" << source_cloud->points.size() << endl;
+
+	pcl::PolygonMesh mesh;
+	if (pcl::io::loadPolygonFileSTL("model.stl", mesh) == -1)		//Prismatic002.stl model.STL
+	{
+		PCL_ERROR("STL读取失败 \n");
+		return (-1);
+	}
+	pcl::PointCloud<pcl::PointXYZ>::Ptr cloudModel(new pcl::PointCloud<pcl::PointXYZ>);
+	Mesh2CloudPCL(*cloudModel, mesh);
+
+	//Load scene
+	pcl::PointCloud<pcl::PointXYZ>::Ptr cloudScene(new pcl::PointCloud<pcl::PointXYZ>);
+	if (pcl::io::loadPCDFile<pcl::PointXYZ>("scene.pcd", *cloudScene) == -1) 
+	{
+		PCL_ERROR("Couldn't read file\n");
+		return (-1);
+	}
+
+	cout << "点云点数：" << cloudScene->points.size() << endl;
 	boost::shared_ptr<pcl::Correspondences> cru_correspondences(new pcl::Correspondences);
 
+	//pcl::Indices indices1;
+	//for (int i = 0; i < cloudModel->points.size(); i += 2)
+	//{
+	//	indices1.push_back(i);
+	//}
+	//pcl::PointCloud<pcl::PointXYZ>::Ptr cloudModelFiltered(new pcl::PointCloud<pcl::PointXYZ>);
+	//pcl::copyPointCloud(*cloudModel, indices1, *cloudModelFiltered);
+
+	//pcl::Indices indices2;
+	//for (int i = 0; i < cloudScene->points.size(); i += 1)
+	//{
+	//	indices2.push_back(i);
+	//}
+	//pcl::PointCloud<pcl::PointXYZ>::Ptr cloudSceneFiltered(new pcl::PointCloud<pcl::PointXYZ>);
+	//pcl::copyPointCloud(*cloudScene, indices2, *cloudSceneFiltered);
 	pcl::VoxelGrid<pcl::PointXYZ> vg;
-	vg.setLeafSize(1, 1, 1);
+	vg.setLeafSize(LEAF_SIZE, LEAF_SIZE, LEAF_SIZE);
 	vg.setDownsampleAllData(false);
 
-	vg.setInputCloud(source_cloud);
-	vg.filter(*source_cloud);
+	vg.setInputCloud(cloudModel);
+	vg.filter(*cloudModel);
 
-	vg.setInputCloud(target_cloud);
-	vg.filter(*target_cloud);
+	vg.setInputCloud(cloudScene);
+	vg.filter(*cloudScene);
 
-	ComputeFPFH(source_cloud, target_cloud, cru_correspondences);
-	//ComputePPF(source_cloud, target_cloud, cru_correspondences);
+	ComputeFPFH(cloudModel, cloudScene, cru_correspondences);
+	//ComputePPF(cloudModel, cloudScene, cru_correspondences);
 	return 0;
 }
 
