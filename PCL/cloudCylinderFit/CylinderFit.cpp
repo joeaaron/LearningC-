@@ -283,7 +283,7 @@ void FitCone(const std::vector<Eigen::Vector3d>& pts)
 	double last_rms = 1e10;
 	const double stop_rms = 1e-7;
 
-	int max_iters = 50;
+	int max_iters = 100;
 	while (max_iters-- > 0)
 	{
 		//≥ı ºªØ
@@ -444,7 +444,7 @@ int main()
 	//FitCylinder(pts);
 
 	//ProductConeData(pts);
-	pts = ReadPointsFromFile("ConePart.txt");
+	pts = ReadPointsFromFile("cone.txt");
 	//WriteData3("cone1.txt", pts);
 	FitCone(pts);
 	return 0;

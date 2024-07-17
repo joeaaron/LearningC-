@@ -9,11 +9,13 @@
 #include <ceres/rotation.h>
 
 // 定义圆锥参数化模型
-struct ConeCostFunction {
+struct ConeCostFunction 
+{
 	ConeCostFunction(const pcl::PointXYZ& point) : point_(point) {}
 
 	template <typename T>
-	bool operator()(const T* const params, T* residuals) const {
+	bool operator()(const T* const params, T* residuals) const 
+	{
 		// 圆锥的参数：底面顶点 (cx, cy, cz)，圆锥轴方向 (ax, ay, az)，半顶角 alpha
 		const T& cx = params[0];
 		const T& cy = params[1];
@@ -46,8 +48,12 @@ struct ConeCostFunction {
 		// 计算PQ和PN的夹角
 		T pqLength = ceres::sqrt(px * px + py * py + pz * pz);
 		T theta = ceres::acos(dot_product / (pqLength * pnLength));
-		
+
 		residuals[0] = theta - alpha;
+
+		// 计算残差
+		//T cosBeta = ceres::cos(alpha);
+		//residuals[0] = dot_product - pqLength * cosBeta;
 
 		return true;
 	}
@@ -66,7 +72,8 @@ double ConeAngleToSlope(double theta)
 }
 
 
-int main(int argc, char** argv) {
+int main(int argc, char** argv) 
+{
 	// 读取点云数据
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
 	if (pcl::io::loadPCDFile<pcl::PointXYZ>("ConePart2.pcd", *cloud) == -1)		// ConePart.pcd
@@ -97,7 +104,9 @@ int main(int argc, char** argv) {
 	seg.setModelType(pcl::SACMODEL_CONE);
 	seg.setMethodType(pcl::SAC_RANSAC);
 	seg.setMaxIterations(1000);
-	seg.setDistanceThreshold(1); // Adjust according to your dataset(影响拟合点数)
+	seg.setProbability(0.95);		// 拟合比例
+	seg.setNumberOfThreads(12);
+	seg.setDistanceThreshold(0.01); // Adjust according to your dataset(影响拟合点数)
 
 	// Segment the largest cone from the cloud
 	seg.setInputCloud(cloud);
@@ -119,20 +128,34 @@ int main(int argc, char** argv) {
 	params[4] /= norm;
 	params[5] /= norm;
 
+	//double params[7] = {
+	//	0.2870005, 0.680849, 62.088072,
+	//	0.0009, -0.001306, -0.99999,
+	//	0.90
+	//};
 	// 使用Ceres进行精拟合
 	ceres::Problem problem;
 	for (const auto& point : cloud->points) 
 	{
 		ceres::CostFunction* cost_function = new ceres::AutoDiffCostFunction<ConeCostFunction, 1, 7>(new ConeCostFunction(point));
+		ceres::LossFunction* loss_function = new::ceres::HuberLoss(1.0);  // 使用Huber损失函数
 		problem.AddResidualBlock(cost_function, nullptr, params);
 	}
 
 	ceres::Solver::Options options;
 	options.minimizer_type = ceres::TRUST_REGION;
 	options.trust_region_strategy_type = ceres::LEVENBERG_MARQUARDT;
-	//options.linear_solver_type = ceres::DENSE_QR;
+	options.linear_solver_type = ceres::DENSE_QR;
 	options.minimizer_progress_to_stdout = true;
-	options.max_num_iterations = 100; // 最大迭代次数
+	//options.max_num_iterations = 100;			// 最大迭代次数 part1-276
+	options.initial_trust_region_radius = 1e4;	// 设置初始信赖域大小
+	options.num_threads = 4;
+
+	// 设置信赖域策略和参数
+	//options.trust_region_minimizer_iterations_to_output = 1;
+	options.min_trust_region_radius = 1e-6;
+	options.max_trust_region_radius = 1e10;
+	options.initial_trust_region_radius = 1e5;
 
 	ceres::Solver::Summary summary;
 	ceres::Solve(options, &problem, &summary);

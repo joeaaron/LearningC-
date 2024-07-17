@@ -10,7 +10,7 @@ using namespace std;
 int main()
 {
 	pcl::PolygonMesh mesh;
-	if (pcl::io::loadPolygonFileSTL("1600w.stl", mesh) == -1)		//Prismatic002.stl model.stl
+	if (pcl::io::loadPolygonFileSTL("model.stl", mesh) == -1)		//Prismatic002.stl model.stl
 	{
 		PCL_ERROR("STL∂¡»° ß∞‹ \n");
 		return (-1);
@@ -18,7 +18,7 @@ int main()
 
 	//Load scene
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloudScene(new pcl::PointCloud<pcl::PointXYZ>);
-	if (pcl::io::loadPCDFile<pcl::PointXYZ>("1600w.pcd", *cloudScene) == -1)  // scene.pcd
+	if (pcl::io::loadPCDFile<pcl::PointXYZ>("scene.pcd", *cloudScene) == -1)  // scene.pcd
 	{
 		PCL_ERROR("Couldn't read file\n");
 		return (-1);

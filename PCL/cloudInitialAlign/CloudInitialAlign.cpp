@@ -66,9 +66,31 @@ ComputeFPFH(const pointcloud::Ptr& srcCloud, const pointcloud::Ptr& dstCloud, bo
 	cout << "变换矩阵为：\n" << Transform << endl;
 	cout << "预对齐算法用时：" << time.toc() / 1000 << " 秒" << endl;
 
-#if ENABLE_DISPLAY
-	pcl::transformPointCloud(*srcCloud, *srcCloud, Transform);
+	//进行精确配准，采用ICP算法
+	pcl::PointCloud<pcl::PointXYZ>::Ptr icp_result(new pcl::PointCloud<pcl::PointXYZ>());
+	pcl::IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ> icp;
+	//输入待配准点云和目标点云
+	icp.setInputSource(srcCloud);
+	icp.setInputTarget(dstCloud);
+	//Set the max correspondence distance to 4cm (e.g., correspondences with higher distances will be ignored)
+	icp.setMaxCorrespondenceDistance(40);
+	//最大迭代次数
+	icp.setMaximumIterations(50);
+	//两次变化矩阵之间的差值
+	icp.setTransformationEpsilon(1e-10);
+	// 均方误差
+	icp.setEuclideanFitnessEpsilon(0.002);
+	icp.align(*icp_result, Transform);
+	Eigen::Matrix4f icp_trans;
+	icp_trans = icp.getFinalTransformation();
+	std::cout << "icp变换矩阵：" << endl << icp_trans << endl;
+	std::cout << "icp score:" << icp.getFitnessScore() << endl;
+	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_output(new pcl::PointCloud<pcl::PointXYZ>());
 
+#if ENABLE_DISPLAY
+	/*pcl::transformPointCloud(*srcCloud, *srcCloud, Transform);*/
+	pcl::transformPointCloud(
+		*srcCloud, *cloud_output, icp_trans);
 	boost::shared_ptr<pcl::visualization::PCLVisualizer>viewer(new pcl::visualization::PCLVisualizer(u8"显示点云"));
 	viewer->setBackgroundColor(255, 255, 255);
 	// 对目标点云着色可视化 (red).
@@ -77,10 +99,10 @@ ComputeFPFH(const pointcloud::Ptr& srcCloud, const pointcloud::Ptr& dstCloud, bo
 	viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 2, "target cloud");
 	// 对源点云着色可视化 (green).
 	pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ>input_color(srcCloud, 0, 255, 0);
-	viewer->addPointCloud<pcl::PointXYZ>(srcCloud, input_color, "input cloud");
+	viewer->addPointCloud<pcl::PointXYZ>(cloud_output, input_color, "input cloud");
 	viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 2, "input cloud");
 	//对应关系可视化
-	viewer->addCorrespondences<pcl::PointXYZ>(srcCloud, dstCloud, *cru_correspondences, "correspondence");
+	//viewer->addCorrespondences<pcl::PointXYZ>(cloud_output, dstCloud, *cru_correspondences, "correspondence");
 	//viewer->initCameraParameters();
 	while (!viewer->wasStopped())
 	{
@@ -195,6 +217,7 @@ main(int argc, char** argv)
 	//}
 	//pcl::PointCloud<pcl::PointXYZ>::Ptr cloudSceneFiltered(new pcl::PointCloud<pcl::PointXYZ>);
 	//pcl::copyPointCloud(*cloudScene, indices2, *cloudSceneFiltered);
+	//-----------------------------------------
 	pcl::VoxelGrid<pcl::PointXYZ> vg;
 	vg.setLeafSize(LEAF_SIZE, LEAF_SIZE, LEAF_SIZE);
 	vg.setDownsampleAllData(false);
@@ -204,6 +227,28 @@ main(int argc, char** argv)
 
 	vg.setInputCloud(cloudScene);
 	vg.filter(*cloudScene);
+
+	//// 计算质心
+	//Eigen::Vector4f centroid;
+	//pcl::compute3DCentroid(*cloudModel, centroid);
+	//std::cout << "质心: " << centroid.transpose() << std::endl;
+
+	//// 平移矩阵，将质心移动到原点
+	//Eigen::Affine3f transform = Eigen::Affine3f::Identity();
+	//transform.translation() << -centroid[0], -centroid[1], -centroid[2];
+
+	//// 变换点云
+	//pcl::transformPointCloud(*cloudModel, *cloudModel, transform);
+
+	//pcl::compute3DCentroid(*cloudScene, centroid);
+	//std::cout << "质心: " << centroid.transpose() << std::endl;
+
+	//// 平移矩阵，将质心移动到原点
+	//transform = Eigen::Affine3f::Identity();
+	//transform.translation() << -centroid[0], -centroid[1], -centroid[2];
+
+	//// 变换点云
+	//pcl::transformPointCloud(*cloudScene, *cloudScene, transform);
 
 	ComputeFPFH(cloudModel, cloudScene, cru_correspondences);
 	//ComputePPF(cloudModel, cloudScene, cru_correspondences);
