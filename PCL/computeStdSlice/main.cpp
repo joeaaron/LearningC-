@@ -20,13 +20,13 @@ void SLT2Cloud(const char* name, SliceBuf* pbuf)
 	fid.read(reinterpret_cast<char*>(&ct), sizeof(long int));
 
 	// 使用vector动态分配内存
-	pbuf->pCloud.resize(ct * PNT_STRIDE * sizeof(float));
+	pbuf->vCloud.resize(ct * PNT_STRIDE * sizeof(float));
 
 	short int PNT2;
 	for (long int k = 1; k <= ct; ++k) 
 	{
 		for (int j = 1; j <= PNT_STRIDE; j++)
-			fid.read(reinterpret_cast<char*>(pbuf->pCloud.data() + k * PNT_STRIDE + j), sizeof(float));
+			fid.read(reinterpret_cast<char*>(pbuf->vCloud.data() + k * PNT_STRIDE + j), sizeof(float));
 		fid.read(reinterpret_cast<char*>(&PNT2), sizeof(short int));
 	}
 
@@ -42,7 +42,8 @@ int main(int argc, char** argv)
 
 	PCL_Slice slice;
 	pcl::PointCloud<pcl::PointXYZ>::Ptr pCloudOut(new pcl::PointCloud<pcl::PointXYZ>);
-	slice.SetSlicePos(-81.001732);
+	slice.SetAxisDir(em3DCloudSliceAxisDir::eAxixY);
+	slice.SetSlicePos(107.347610);
 	slice.Execute(pCloudOut, buf);
 
 	boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer(new pcl::visualization::PCLVisualizer("3D Viewer"));
