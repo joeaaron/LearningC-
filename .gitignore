@@ -1789,3 +1789,5 @@ build/Practice/tuple/PracticeTuple.vcxproj.filters
 build/Practice/tuple/CMakeFiles/generate.stamp
 build/Practice/tuple/CMakeFiles/generate.stamp.depend
 build/x64/Debug/ZERO_CHECK/ZERO_CHECK.recipe
+bin/
+build/

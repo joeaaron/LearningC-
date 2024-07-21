@@ -130,45 +130,6 @@ void input_stl_PNT(const char* name, struct type_buf* pbuf)
 	fclose(fid);
 }
 
-//void STL2Point(const std::string& name, struct type_buf* pbuf)
-//{
-//	std::ifstream fid(name, std::ios::binary);
-//	if (!fid.is_open()) {
-//		throw std::runtime_error("模型文件打开错误");
-//	}
-//
-//	// 假设文件前20个float是固定数据，这里仅读取而不处理
-//	std::vector<float> temp(20);
-//	fid.read(reinterpret_cast<char*>(temp.data()), temp.size() * sizeof(float));
-//	if (!fid) {
-//		throw std::runtime_error("读取固定数据失败");
-//	}
-//
-//	// 读取点云数量
-//	fid.read(reinterpret_cast<char*>(&pbuf->ct), sizeof(pbuf->ct));
-//	if (!fid) {
-//		throw std::runtime_error("读取点云数量失败");
-//	}
-//
-//	// 分配内存并读取点云数据
-//	pbuf->PNT.resize(pbuf->ct * PNT_STRIDE);
-//	for (long int k = 0; k < pbuf->ct; ++k) {
-//		fid.read(reinterpret_cast<char*>(&pbuf->PNT[k * PNT_STRIDE]), PNT_STRIDE * sizeof(float));
-//		if (!fid) {
-//			throw std::runtime_error("读取点云数据失败");
-//		}
-//
-//		// 假设文件中每个点云数据后都有一个short int，这里仅读取而不处理
-//		short int PNT2;
-//		fid.read(reinterpret_cast<char*>(&PNT2), sizeof(PNT2));
-//		if (!fid) {
-//			throw std::runtime_error("读取short int失败");
-//		}
-//	}
-//
-//	fid.close(); // 或者使用RAII，让ifstream对象在离开作用域时自动关闭
-//}
-
 void RotatePnt(struct type_buf* pbuf)
 {
 	int ct = pbuf->ct;
@@ -549,11 +510,8 @@ void main(void)
 		return ;
 	}
 
-	//PclPolygonToBuf(&buf, *mesh);
-
 	//输入STL格式
 	input_stl_PNT("test1.stl", &buf);
-	//STL2Point("test1.stl", &buf);
 
 	//旋转点云
 	RotatePnt(&buf);

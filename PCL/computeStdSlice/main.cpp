@@ -42,8 +42,8 @@ int main(int argc, char** argv)
 
 	PCL_Slice slice;
 	pcl::PointCloud<pcl::PointXYZ>::Ptr pCloudOut(new pcl::PointCloud<pcl::PointXYZ>);
-	slice.SetAxisDir(em3DCloudSliceAxisDir::eAxixY);
-	slice.SetSlicePos(107.347610);
+	slice.SetAxisDir(em3DCloudSliceAxisDir::eAxixZ);
+	slice.SetSlicePos(-12.64);
 	slice.Execute(pCloudOut, buf);
 
 	boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer(new pcl::visualization::PCLVisualizer("3D Viewer"));

@@ -157,7 +157,7 @@ void FitCylinder(const std::vector<Eigen::Vector3d>& pts)
 	double last_rms = 1e10;
 	const double stop_rms = 1e-7;
 
-	int max_iters = 50;
+	int max_iters = 1000;
 	while (max_iters-- > 0)
 	{
 		//初始化
@@ -283,7 +283,7 @@ void FitCone(const std::vector<Eigen::Vector3d>& pts)
 	double last_rms = 1e10;
 	const double stop_rms = 1e-7;
 
-	int max_iters = 100;
+	int max_iters = 1000;
 	while (max_iters-- > 0)
 	{
 		//初始化
