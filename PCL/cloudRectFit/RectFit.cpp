@@ -84,11 +84,11 @@ RectangleParameters EstimateInitialParameters(const std::vector<Eigen::Vector3d>
 	return params;
 }
 
-int main(int argc, char** argv) {
-	//google::InitGoogleLogging(argv[0]);
-
+int main(int argc, char** argv) 
+{
 	// 生成点云数据（这里用真实数据替代）
-	std::vector<Eigen::Vector3d> points = {
+	std::vector<Eigen::Vector3d> points = 
+	{
 		// 添加点坐标
 	};
 
