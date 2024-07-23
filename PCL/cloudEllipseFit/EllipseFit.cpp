@@ -9,6 +9,8 @@
 
 using namespace std;
 
+const int FIT_METHOD = 0;
+
 // 定义椭圆参数结构体
 struct EllipseParameters {
 	double center[3];  // 椭圆中心 (x0, y0, z0)
@@ -50,6 +52,137 @@ struct EllipseResidual {
 
 		// 计算最近点的残差
 		Eigen::Matrix<T, 3, 1> p = c + *a * cos(theta) * u_vec + *b * sin(theta) * v;
+		residual[0] = point_[0] - p[0];
+		residual[1] = point_[1] - p[1];
+		residual[2] = point_[2] - p[2];
+
+		return true;
+	}
+
+private:
+	const Eigen::Vector3d point_;
+};
+
+// LM算法
+struct EllipseResidualLM {
+	EllipseResidualLM(const Eigen::Vector3d& point)
+		: point_(point) {}
+
+	template <typename T>
+	bool operator()(const T* const center,
+		const T* const a,
+		const T* const b,
+		const T* const normal,
+		const T* const u,
+		T* residual) const {
+		// 计算椭圆平面的正交基向量v
+		Eigen::Matrix<T, 3, 1> n(normal);
+		Eigen::Matrix<T, 3, 1> u_vec(u);
+		Eigen::Matrix<T, 3, 1> v = n.cross(u_vec).normalized();
+
+		// 计算点到椭圆的最近点
+		Eigen::Matrix<T, 3, 1> c(center);
+		T theta = T(0.0);
+		T min_distance = std::numeric_limits<T>::max();
+
+		// LM法参数
+		const T tolerance = T(1e-6);
+		const int max_iterations = 100;
+		T lambda = T(1e-3);
+
+		for (int i = 0; i < max_iterations; ++i) {
+			// 计算当前点
+			Eigen::Matrix<T, 3, 1> p = c + (*a * cos(theta) * u_vec) + (*b * sin(theta) * v);
+			Eigen::Matrix<T, 3, 1> dp_dtheta = -(*a * sin(theta) * u_vec) + (*b * cos(theta) * v);
+
+			// 计算当前距离和梯度
+			Eigen::Matrix<T, 3, 1> diff = p - point_.cast<T>();
+			T distance = diff.squaredNorm();
+			T grad = 2.0 * diff.dot(dp_dtheta);
+
+			// LM法更新
+			T hessian = 2.0 * (dp_dtheta.dot(dp_dtheta) + diff.dot(-(*a * cos(theta) * u_vec) - (*b * sin(theta) * v)));
+			T step = grad / (hessian + lambda);
+			theta -= step;
+
+			// 调整lambda
+			if (distance < min_distance) {
+				min_distance = distance;
+				lambda *= 0.1;
+			}
+			else {
+				lambda *= 10;
+			}
+
+			// 检查收敛条件
+			if (step < tolerance) {
+				break;
+			}
+		}
+
+		// 计算最佳角度下的残差
+		Eigen::Matrix<T, 3, 1> p = c + (*a * cos(theta) * u_vec) + (*b * sin(theta) * v);
+		residual[0] = point_[0] - p[0];
+		residual[1] = point_[1] - p[1];
+		residual[2] = point_[2] - p[2];
+
+		return true;
+	}
+
+private:
+	const Eigen::Vector3d point_;
+};
+
+// 牛顿法
+struct EllipseResidualNewton {
+	EllipseResidualNewton(const Eigen::Vector3d& point)
+		: point_(point) {}
+
+	template <typename T>
+	bool operator()(const T* const center,
+		const T* const a,
+		const T* const b,
+		const T* const normal,
+		const T* const u,
+		T* residual) const {
+		// 计算椭圆平面的正交基向量v
+		Eigen::Matrix<T, 3, 1> n(normal);
+		Eigen::Matrix<T, 3, 1> u_vec(u);
+		Eigen::Matrix<T, 3, 1> v = n.cross(u_vec).normalized();
+
+		// 计算点到椭圆的最近点
+		Eigen::Matrix<T, 3, 1> c(center);
+		T theta = T(0.0);
+		T min_distance = std::numeric_limits<T>::max();
+
+		// 初始值和牛顿法参数
+		T t = T(0.0); // 初始角度
+		const T tolerance = T(1e-6);
+		const int max_iterations = 100;
+
+		for (int i = 0; i < max_iterations; ++i) {
+			// 计算当前点
+			Eigen::Matrix<T, 3, 1> p = c + (*a * cos(t) * u_vec) + (*b * sin(t) * v);
+			Eigen::Matrix<T, 3, 1> dp_dt = -(*a * sin(t) * u_vec) + (*b * cos(t) * v);
+
+			// 计算当前距离和梯度
+			Eigen::Matrix<T, 3, 1> diff = p - point_.cast<T>();
+			T distance = diff.squaredNorm();
+			T grad = 2.0 * diff.dot(dp_dt);
+
+			// 牛顿法更新
+			T hessian = 2.0 * (dp_dt.dot(dp_dt) + diff.dot(-(*a * cos(t) * u_vec) - (*b * sin(t) * v)));
+			T step = grad / hessian;
+			t -= step;
+
+			// 检查收敛条件
+			if (step < tolerance) {
+				break;
+			}
+		}
+
+		// 计算最佳角度下的残差
+		Eigen::Matrix<T, 3, 1> p = c + (*a * cos(t) * u_vec) + (*b * sin(t) * v);
 		residual[0] = point_[0] - p[0];
 		residual[1] = point_[1] - p[1];
 		residual[2] = point_[2] - p[2];
@@ -130,16 +263,38 @@ int main()
 	ellipse.u[1] = coeff[9];
 	ellipse.u[2] = coeff[10];
 
-	for (const auto& point : points) {
-		ceres::CostFunction* cost_function =
-			new ceres::AutoDiffCostFunction<EllipseResidual, 3, 3, 1, 1, 3, 3>(
-				new EllipseResidual(point));
-		problem.AddResidualBlock(cost_function, nullptr, ellipse.center, &ellipse.a, &ellipse.b, ellipse.normal, ellipse.u);
+	for (const auto& point : points) 
+	{
+		if (0 == FIT_METHOD)
+		{
+			ceres::CostFunction* cost_function =
+				new ceres::AutoDiffCostFunction<EllipseResidual, 3, 3, 1, 1, 3, 3>(
+					new EllipseResidual(point));
+
+			problem.AddResidualBlock(cost_function, nullptr, ellipse.center, &ellipse.a, &ellipse.b, ellipse.normal, ellipse.u);
+		}	
+		else if (1 == FIT_METHOD)
+		{
+			ceres::CostFunction* cost_function =
+				new ceres::AutoDiffCostFunction<EllipseResidualLM, 3, 3, 1, 1, 3, 3>(
+					new EllipseResidualLM(point));
+
+			problem.AddResidualBlock(cost_function, nullptr, ellipse.center, &ellipse.a, &ellipse.b, ellipse.normal, ellipse.u);
+		}
+		else if (2 == FIT_METHOD)
+		{
+			ceres::CostFunction* cost_function =
+				new ceres::AutoDiffCostFunction<EllipseResidualNewton, 3, 3, 1, 1, 3, 3>(
+					new EllipseResidualNewton(point));
+
+			problem.AddResidualBlock(cost_function, nullptr, ellipse.center, &ellipse.a, &ellipse.b, ellipse.normal, ellipse.u);
+		}
 	}
 
 	ceres::Solver::Options options;
 	options.linear_solver_type = ceres::DENSE_QR;
 	options.minimizer_progress_to_stdout = true;
+	options.num_threads = 4;					 
 
 	ceres::Solver::Summary summary;
 	ceres::Solve(options, &problem, &summary);
@@ -149,7 +304,7 @@ int main()
 	ellipse.normal[1] /= norm;
 	ellipse.normal[2] /= norm;
 
-	std::cout << summary.FullReport() << std::endl;
+	std::cout << summary.BriefReport() << std::endl;
 	std::cout << "Center: (" << ellipse.center[0] << ", " << ellipse.center[1] << ", " << ellipse.center[2] << ")" << std::endl;
 	std::cout << "Semi-major axis: " << ellipse.a << std::endl;
 	std::cout << "Semi-minor axis: " << ellipse.b << std::endl;
