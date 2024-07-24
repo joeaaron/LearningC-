@@ -1,7 +1,7 @@
 #include <iostream>
 #include <pcl/io/pcd_io.h>
 #include <pcl/sample_consensus/ransac.h>
-#include <pcl/sample_consensus/sac_model_ellipse3d.h>// 拟合3D椭圆
+#include <pcl/sample_consensus/sac_model_ellipse3d.h>			// 拟合3D椭圆
 #include <pcl/visualization/pcl_visualizer.h>
 #include <boost/thread/thread.hpp>
 #include <ceres/ceres.h>
@@ -11,38 +11,38 @@ using namespace std;
 
 const int FIT_METHOD = 0;
 
+#define ENABLE_DISPLAY 0		// 定义一个宏，用于控制显示状态
+
 // 定义椭圆参数结构体
-struct EllipseParameters {
-	double center[3];  // 椭圆中心 (x0, y0, z0)
-	double a;          // 半长轴
-	double b;          // 半短轴
-	double normal[3];  // 法向量 (nx, ny, nz)
-	double u[3];       // 局部u轴 (ux, uy, uz)
+struct EllipseParameters 
+{
+	Eigen::Vector3d center; // 椭圆中心
+	double a;				// 半长轴
+	double b;				// 半短轴
+	Eigen::Vector3d normal; // 法向量
+	Eigen::Vector3d u;		// 局部u轴
+
+	//EllipseParameters(const Eigen::Vector3d& c, double a_, double b_, const Eigen::Vector3d& n, const Eigen::Vector3d& u)
+	//	: center(c), a(a_), b(b_), normal(n), u_axis(u) {}
 };
 
-// 定义残差块
-struct EllipseResidual {
-	EllipseResidual(const Eigen::Vector3d& point)
+struct EllipseResidual1 {
+	EllipseResidual1(const Eigen::Vector3d& point)
 		: point_(point) {}
 
 	template <typename T>
-	bool operator()(const T* const center,
-		const T* const a,
-		const T* const b,
-		const T* const normal,
-		const T* const u,
-		T* residual) const {
+	bool operator()(const T* const params, T* residual) const {
 		// 计算椭圆平面的正交基向量v
-		Eigen::Matrix<T, 3, 1> n(normal);
-		Eigen::Matrix<T, 3, 1> u_vec(u);
+		Eigen::Matrix<T, 3, 1> n(params[5], params[6], params[7]);
+		Eigen::Matrix<T, 3, 1> u_vec(params[8], params[9], params[10]);
 		Eigen::Matrix<T, 3, 1> v = n.cross(u_vec).normalized();
 
 		// 计算点到椭圆的最近点
-		Eigen::Matrix<T, 3, 1> c(center);
+		Eigen::Matrix<T, 3, 1> c(params[0], params[1], params[2]);
 		T theta = T(0.0);
 		T min_distance = std::numeric_limits<T>::max();
 		for (T t = T(0.0); t < T(2.0 * M_PI); t += T(0.01)) {
-			Eigen::Matrix<T, 3, 1> p = c + *a * cos(t) * u_vec + *b * sin(t) * v;
+			Eigen::Matrix<T, 3, 1> p = c + params[3] * cos(t) * u_vec + params[4] * sin(t) * v;
 			T distance = (point_.cast<T>() - p).squaredNorm();
 			if (distance < min_distance) {
 				min_distance = distance;
@@ -51,147 +51,136 @@ struct EllipseResidual {
 		}
 
 		// 计算最近点的残差
-		Eigen::Matrix<T, 3, 1> p = c + *a * cos(theta) * u_vec + *b * sin(theta) * v;
+		Eigen::Matrix<T, 3, 1> p = c + params[3] * cos(theta) * u_vec + params[4] * sin(theta) * v;
 		residual[0] = point_[0] - p[0];
 		residual[1] = point_[1] - p[1];
 		residual[2] = point_[2] - p[2];
 
 		return true;
 	}
-
+	static ceres::CostFunction* Create(const Eigen::Vector3d& point) {
+		return (new ceres::AutoDiffCostFunction<EllipseResidual1, 1, 11>(
+			new EllipseResidual1(point)));
+	}
 private:
 	const Eigen::Vector3d point_;
 };
 
-// LM算法
-struct EllipseResidualLM {
-	EllipseResidualLM(const Eigen::Vector3d& point)
-		: point_(point) {}
+struct EllipseResidual {
+	EllipseResidual(const Eigen::Vector3d& point) : point_(point) {}
 
 	template <typename T>
 	bool operator()(const T* const center,
 		const T* const a,
 		const T* const b,
 		const T* const normal,
-		const T* const u,
-		T* residual) const {
-		// 计算椭圆平面的正交基向量v
-		Eigen::Matrix<T, 3, 1> n(normal);
-		Eigen::Matrix<T, 3, 1> u_vec(u);
-		Eigen::Matrix<T, 3, 1> v = n.cross(u_vec).normalized();
+		const T* const u_axis,
+		T* residuals) const 
+	{
+		// 将输入参数转换为Eigen类型
+		Eigen::Matrix<T, 3, 1> center_(center[0], center[1], center[2]);
+		Eigen::Matrix<T, 3, 1> normal_(normal[0], normal[1], normal[2]);
+		Eigen::Matrix<T, 3, 1> u_axis_(u_axis[0], u_axis[1], u_axis[2]);
 
-		// 计算点到椭圆的最近点
-		Eigen::Matrix<T, 3, 1> c(center);
-		T theta = T(0.0);
-		T min_distance = std::numeric_limits<T>::max();
+		// 点到椭圆的距离计算
+		Eigen::Matrix<T, 3, 1> diff = point_.cast<T>() - center_;
 
-		// LM法参数
-		const T tolerance = T(1e-6);
-		const int max_iterations = 100;
-		T lambda = T(1e-3);
+		// 旋转u_axis，使其与diff对齐
+		Eigen::Matrix<T, 3, 1> v_axis = normal_.cross(u_axis_).normalized();
+		Eigen::Matrix<T, 3, 1> rotated_diff = Eigen::Matrix<T, 3, 1>(diff.dot(u_axis_), diff.dot(v_axis), diff.dot(normal_));
 
-		for (int i = 0; i < max_iterations; ++i) {
-			// 计算当前点
-			Eigen::Matrix<T, 3, 1> p = c + (*a * cos(theta) * u_vec) + (*b * sin(theta) * v);
-			Eigen::Matrix<T, 3, 1> dp_dtheta = -(*a * sin(theta) * u_vec) + (*b * cos(theta) * v);
+		// 椭圆方程
+		T ellipse_distance = (rotated_diff[0] * rotated_diff[0]) / (a[0] * a[0]) +
+			(rotated_diff[1] * rotated_diff[1]) / (b[0] * b[0]);
 
-			// 计算当前距离和梯度
-			Eigen::Matrix<T, 3, 1> diff = p - point_.cast<T>();
-			T distance = diff.squaredNorm();
-			T grad = 2.0 * diff.dot(dp_dtheta);
-
-			// LM法更新
-			T hessian = 2.0 * (dp_dtheta.dot(dp_dtheta) + diff.dot(-(*a * cos(theta) * u_vec) - (*b * sin(theta) * v)));
-			T step = grad / (hessian + lambda);
-			theta -= step;
-
-			// 调整lambda
-			if (distance < min_distance) {
-				min_distance = distance;
-				lambda *= 0.1;
-			}
-			else {
-				lambda *= 10;
-			}
-
-			// 检查收敛条件
-			if (step < tolerance) {
-				break;
-			}
-		}
-
-		// 计算最佳角度下的残差
-		Eigen::Matrix<T, 3, 1> p = c + (*a * cos(theta) * u_vec) + (*b * sin(theta) * v);
-		residual[0] = point_[0] - p[0];
-		residual[1] = point_[1] - p[1];
-		residual[2] = point_[2] - p[2];
+		residuals[0] = ellipse_distance - T(1.0);
 
 		return true;
 	}
 
-private:
-	const Eigen::Vector3d point_;
+	static ceres::CostFunction* Create(const Eigen::Vector3d& point) {
+		return (new ceres::AutoDiffCostFunction<EllipseResidual, 3, 3, 1, 1, 3, 3>(
+			new EllipseResidual(point)));
+	}
+
+	Eigen::Vector3d point_;
 };
 
-// 牛顿法
-struct EllipseResidualNewton {
-	EllipseResidualNewton(const Eigen::Vector3d& point)
-		: point_(point) {}
+struct EllipseResidualX {
+	EllipseResidualX(const Eigen::Vector3d& point) : point_(point) {}
 
 	template <typename T>
-	bool operator()(const T* const center,
-		const T* const a,
-		const T* const b,
-		const T* const normal,
-		const T* const u,
-		T* residual) const {
-		// 计算椭圆平面的正交基向量v
-		Eigen::Matrix<T, 3, 1> n(normal);
-		Eigen::Matrix<T, 3, 1> u_vec(u);
-		Eigen::Matrix<T, 3, 1> v = n.cross(u_vec).normalized();
+	bool operator()(const T* const params, T* residuals) const 
+	{
+		Eigen::Matrix<T, 3, 1> center(params[0], params[1], params[2]);
+		T a = params[3];
+		T b = params[4];
+		Eigen::Matrix<T, 3, 1> normal(params[5], params[6], params[7]);
+		Eigen::Matrix<T, 3, 1> u_axis(params[8], params[9], params[10]);
 
-		// 计算点到椭圆的最近点
-		Eigen::Matrix<T, 3, 1> c(center);
-		T theta = T(0.0);
-		T min_distance = std::numeric_limits<T>::max();
+		// 计算点到中心的向量
+		Eigen::Matrix<T, 3, 1> diff = point_.cast<T>() - center;
 
-		// 初始值和牛顿法参数
-		T t = T(0.0); // 初始角度
-		const T tolerance = T(1e-6);
-		const int max_iterations = 100;
+		// 计算法向量的正交向量
+		Eigen::Matrix<T, 3, 1> v_axis = normal.cross(u_axis);    // .normalized();
 
-		for (int i = 0; i < max_iterations; ++i) {
-			// 计算当前点
-			Eigen::Matrix<T, 3, 1> p = c + (*a * cos(t) * u_vec) + (*b * sin(t) * v);
-			Eigen::Matrix<T, 3, 1> dp_dt = -(*a * sin(t) * u_vec) + (*b * cos(t) * v);
+		// 旋转u_axis，使其与diff对齐
+		Eigen::Matrix<T, 3, 1> rotated_diff(diff.dot(u_axis), diff.dot(v_axis), diff.dot(normal));  //使用这三个向量（u轴、v轴和法向量）将diff向量旋转到一个新的坐标系（这实际上是找到diff在椭圆主轴坐标系下的坐标）。
 
-			// 计算当前距离和梯度
-			Eigen::Matrix<T, 3, 1> diff = p - point_.cast<T>();
-			T distance = diff.squaredNorm();
-			T grad = 2.0 * diff.dot(dp_dt);
+		// 椭圆方程
+		T ellipse_distance = (rotated_diff[0] * rotated_diff[0]) / (a * a) +
+			(rotated_diff[1] * rotated_diff[1]) / (b * b);
 
-			// 牛顿法更新
-			T hessian = 2.0 * (dp_dt.dot(dp_dt) + diff.dot(-(*a * cos(t) * u_vec) - (*b * sin(t) * v)));
-			T step = grad / hessian;
-			t -= step;
-
-			// 检查收敛条件
-			if (step < tolerance) {
-				break;
-			}
-		}
-
-		// 计算最佳角度下的残差
-		Eigen::Matrix<T, 3, 1> p = c + (*a * cos(t) * u_vec) + (*b * sin(t) * v);
-		residual[0] = point_[0] - p[0];
-		residual[1] = point_[1] - p[1];
-		residual[2] = point_[2] - p[2];
+		residuals[0] = ellipse_distance - T(1.0);
 
 		return true;
 	}
 
-private:
-	const Eigen::Vector3d point_;
+	static ceres::CostFunction* Create(const Eigen::Vector3d& point) {
+		return (new ceres::AutoDiffCostFunction<EllipseResidualX, 1, 11>(
+			new EllipseResidualX(point)));
+	}
+
+	Eigen::Vector3d point_;
+};
+
+struct EllipseResidualXX {
+	EllipseResidualXX(const Eigen::Vector3d& point) : point_(point) {}
+
+	template <typename T>
+	bool operator()(const T* const params, T* residuals) const 
+	{
+		Eigen::Matrix<T, 3, 1> c(params[0], params[1], params[2]);
+		T A = params[3];
+		T B = params[4];
+		Eigen::Matrix<T, 3, 1> n(params[5], params[6], params[7]);
+		Eigen::Matrix<T, 3, 1> u(params[8], params[9], params[10]);
+
+		// 计算法向量的正交向量
+		Eigen::Matrix<T, 3, 1> v = n.cross(u).normalized();
+
+		// 计算点到中心的向量
+		Eigen::Matrix<T, 3, 1> diff = point_.cast<T>() - c;
+
+		// 将diff旋转到椭圆的本地坐标系
+		Eigen::Matrix<T, 3, 1> local_diff(u.dot(diff), v.dot(diff), n.dot(diff));
+
+		// 计算到椭圆表面的距离
+		T local_distance = ceres::sqrt(local_diff[0] * local_diff[0] / (A * A) +
+			local_diff[1] * local_diff[1] / (B * B));
+
+		// 残差为点到椭圆表面的最近距离
+		residuals[0] = local_diff.norm() - local_distance;
+
+		return true;
+	}
+
+	static ceres::CostFunction* Create(const Eigen::Vector3d& point) {
+		return (new ceres::AutoDiffCostFunction<EllipseResidualXX, 1, 11>(
+			new EllipseResidualXX(point)));
+	}
+
+	Eigen::Vector3d point_;
 };
 
 std::vector<Eigen::Vector3d> PointCloud2Vector3d(const pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
@@ -206,14 +195,13 @@ std::vector<Eigen::Vector3d> PointCloud2Vector3d(const pcl::PointCloud<pcl::Poin
 	}
 
 	return vectors;
-
 }
 
 int main()
 {
 	// -------------------------加载点云------------------------------
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
-	if (pcl::io::loadPCDFile("ellipse.pcd", *cloud) < 0)
+	if (pcl::io::loadPCDFile("ellipse1.pcd", *cloud) < 0)
 	{
 		PCL_ERROR("Couldn't read file \n");
 		return -1;
@@ -221,7 +209,7 @@ int main()
 	// ------------------------RANSAC框架-----------------------------   
 	pcl::SampleConsensusModelEllipse3D<pcl::PointXYZ>::Ptr Ellipse3D(new pcl::SampleConsensusModelEllipse3D<pcl::PointXYZ>(cloud));
 	pcl::RandomSampleConsensus<pcl::PointXYZ> ransac(Ellipse3D);
-	ransac.setDistanceThreshold(0.19);	        // 距离阈值，与模型距离小于0.01的点作为内点
+	ransac.setDistanceThreshold(0.13);	        // 距离阈值，与模型距离小于0.01的点作为内点
 	ransac.setMaxIterations(100);		        // 最大迭代次数
 	ransac.computeModel();				        // 拟合3D椭圆
 	pcl::IndicesPtr inliers(new vector <int>());// 存储内点索引的向量
@@ -250,45 +238,38 @@ int main()
 	ceres::Problem problem;
 
 	// 初始化椭圆参数
-	EllipseParameters ellipse;
-	ellipse.center[0] = coeff[0];
-	ellipse.center[1] = coeff[1];
-	ellipse.center[2] = coeff[2];
-	ellipse.a = coeff[3];
-	ellipse.b = coeff[4];
-	ellipse.normal[0] = coeff[5];
-	ellipse.normal[1] = coeff[6];
-	ellipse.normal[2] = coeff[7];
-	ellipse.u[0] = coeff[8];
-	ellipse.u[1] = coeff[9];
-	ellipse.u[2] = coeff[10];
+	//EllipseParameters ellipse;
+	//ellipse.center << static_cast<double>(coeff[0]),
+	//	static_cast<double>(coeff[1]),
+	//	static_cast<double>(coeff[2]);
+	//ellipse.normal << static_cast<double>(coeff[5]),
+	//	static_cast<double>(coeff[6]),
+	//	static_cast<double>(coeff[7]);
+	//ellipse.u << static_cast<double>(coeff[8]),
+	//	static_cast<double>(coeff[9]),
+	//	static_cast<double>(coeff[10]);
+	//ellipse.a = coeff[3];
+	//ellipse.b = coeff[4];
+
+	double params[11] = {
+	   coeff[0], coeff[1], coeff[2],
+	   coeff[3], coeff[4],
+	   coeff[5], coeff[6], coeff[7],
+	   coeff[8], coeff[9], coeff[10],
+	};
 
 	for (const auto& point : points) 
 	{
 		if (0 == FIT_METHOD)
 		{
-			ceres::CostFunction* cost_function =
-				new ceres::AutoDiffCostFunction<EllipseResidual, 3, 3, 1, 1, 3, 3>(
-					new EllipseResidual(point));
-
-			problem.AddResidualBlock(cost_function, nullptr, ellipse.center, &ellipse.a, &ellipse.b, ellipse.normal, ellipse.u);
-		}	
+			ceres::CostFunction* cost_function = EllipseResidualX::Create(point);
+			problem.AddResidualBlock(cost_function, nullptr, params);
+		}
 		else if (1 == FIT_METHOD)
 		{
-			ceres::CostFunction* cost_function =
-				new ceres::AutoDiffCostFunction<EllipseResidualLM, 3, 3, 1, 1, 3, 3>(
-					new EllipseResidualLM(point));
-
-			problem.AddResidualBlock(cost_function, nullptr, ellipse.center, &ellipse.a, &ellipse.b, ellipse.normal, ellipse.u);
-		}
-		else if (2 == FIT_METHOD)
-		{
-			ceres::CostFunction* cost_function =
-				new ceres::AutoDiffCostFunction<EllipseResidualNewton, 3, 3, 1, 1, 3, 3>(
-					new EllipseResidualNewton(point));
-
-			problem.AddResidualBlock(cost_function, nullptr, ellipse.center, &ellipse.a, &ellipse.b, ellipse.normal, ellipse.u);
-		}
+			ceres::CostFunction* cost_function = EllipseResidual1::Create(point);
+			problem.AddResidualBlock(cost_function, nullptr, params);
+		}	
 	}
 
 	ceres::Solver::Options options;
@@ -297,20 +278,27 @@ int main()
 	options.num_threads = 4;					 
 
 	ceres::Solver::Summary summary;
+	chrono::steady_clock::time_point t1 = chrono::steady_clock::now();
 	ceres::Solve(options, &problem, &summary);
-	double norm = std::sqrt(ellipse.normal[0] * ellipse.normal[0] + ellipse.normal[1] * ellipse.normal[1] + ellipse.normal[2] * ellipse.normal[2]);
+	chrono::steady_clock::time_point t2 = chrono::steady_clock::now();
+	chrono::duration<double> time_used = chrono::duration_cast<chrono::duration<double>>(t2 - t1);
+	cout << "Point size:" << cloud->points.size() << endl;
+	cout << "Solve time cost = " << time_used.count() << " seconds. " << endl;
 
-	ellipse.normal[0] /= norm;
-	ellipse.normal[1] /= norm;
-	ellipse.normal[2] /= norm;
+	double norm = std::sqrt(params[5] * params[5] + params[6] * params[6] + params[7] * params[7]);
+	params[5] /= norm;
+	params[6] /= norm;
+	params[7] /= norm;
 
 	std::cout << summary.BriefReport() << std::endl;
-	std::cout << "Center: (" << ellipse.center[0] << ", " << ellipse.center[1] << ", " << ellipse.center[2] << ")" << std::endl;
-	std::cout << "Semi-major axis: " << ellipse.a << std::endl;
-	std::cout << "Semi-minor axis: " << ellipse.b << std::endl;
-	std::cout << "Normal: (" << ellipse.normal[0] << ", " << ellipse.normal[1] << ", " << ellipse.normal[2] << ")" << std::endl;
-	std::cout << "U axis: (" << ellipse.u[0] << ", " << ellipse.u[1] << ", " << ellipse.u[2] << ")" << std::endl;
+	// 输出拟合结果
+	std::cout << "Center: (" << params[0] << ", " << params[1] << ", " << params[2] << ")\n";
+	std::cout << "Big diameter: " << params[3] * 2 << "\n";
+	std::cout << "Small diameter: " << params[4] * 2 << "\n";
+	std::cout << "Normal: (" << params[5] << ", " << params[6] << ", " << params[7] << ")\n";
+	std::cout << "U axis: (" << params[8] << ", " << params[9] << ", " << params[10] << ")\n";
 
+#if ENABLE_DISPLAY
 	// ---------------如果内点不存在则不进行可视化--------------------
 	if (Ellipse_3D->size() == 0)
 	{
@@ -337,7 +325,7 @@ int main()
 			//boost::this_thread::sleep(boost::posix_time::microseconds(100000));
 		}
 	}
-
+#endif
 	return 0;
 }
 
