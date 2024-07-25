@@ -143,7 +143,7 @@ int main()
     //----------------读取点云数据---------------------
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
     pcl::PCDReader reader;
-    reader.read<pcl::PointXYZ>("airplane.pcd", *cloud);    // L.pcd airplane.pcd
+    reader.read<pcl::PointXYZ>("edge1.pcd", *cloud);    // L.pcd airplane.pcd
    
     pcl::PointCloud<pcl::PointXYZ>::Ptr line(new pcl::PointCloud<pcl::PointXYZ>);
     pcl::ModelCoefficients::Ptr coeff(new pcl::ModelCoefficients);
