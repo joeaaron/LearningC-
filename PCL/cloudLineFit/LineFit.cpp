@@ -94,11 +94,16 @@ void LS_LineFit(pcl::PointCloud<pcl::PointXYZ>::Ptr& line, pcl::ModelCoefficient
 
     // 获取特征值对应的特征向量
     Eigen::RowVector3f v1 = pca.getEigenVectors().col(0);
-    Eigen::RowVector3f v2 = pca.getEigenVectors().col(1);
-    Eigen::RowVector3f v3 = pca.getEigenVectors().col(2);
-
+	/* Eigen::RowVector3f v2 = pca.getEigenVectors().col(1);
+	 Eigen::RowVector3f v3 = pca.getEigenVectors().col(2);*/
+	 // 校正直线方向向量：保证z分量始终为正 240725
+	if (v1[2] < 0)
+	{
+		v1 = -v1;
+	}
     // 直线的点向式
     float m = v1[0], n = v1[1], p = v1[2];
+
     float x0 = pca.getMean()[0], y0 = pca.getMean()[1], z0 = pca.getMean()[2];
 	coeff->values.push_back(x0);
 	coeff->values.push_back(y0);
@@ -138,7 +143,7 @@ int main()
     //----------------读取点云数据---------------------
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
     pcl::PCDReader reader;
-    reader.read<pcl::PointXYZ>("L.pcd", *cloud);
+    reader.read<pcl::PointXYZ>("airplane.pcd", *cloud);    // L.pcd airplane.pcd
    
     pcl::PointCloud<pcl::PointXYZ>::Ptr line(new pcl::PointCloud<pcl::PointXYZ>);
     pcl::ModelCoefficients::Ptr coeff(new pcl::ModelCoefficients);
@@ -181,6 +186,10 @@ int main()
 	ceres::Solver::Options options;
 	options.linear_solver_type = ceres::DENSE_QR;
 	options.minimizer_progress_to_stdout = true;
+	options.function_tolerance = 1e-6;					// 函数容差
+	options.gradient_tolerance = 1e-6;					// 梯度容差
+	options.parameter_tolerance = 1e-6;					// 参数容差
+	options.num_threads = 4;
 
 	ceres::Solver::Summary summary;
     chrono::steady_clock::time_point t1 = chrono::steady_clock::now();
@@ -193,28 +202,28 @@ int main()
 	std::cout << summary.BriefReport() << std::endl;
 
 	// 提取直线参数
-	Eigen::Vector3f p(coeff->values[0], coeff->values[1], coeff->values[2]);
-	Eigen::Vector3f d(coeff->values[3], coeff->values[4], coeff->values[5]);
+	Eigen::Vector3d p(coeff->values[0], coeff->values[1], coeff->values[2]);
+	Eigen::Vector3d d(coeff->values[3], coeff->values[4], coeff->values[5]);
 
 	d.norm();		// 直线方向向量，进行归一化
 
-	std::vector<Eigen::Vector3f> projected_points;
-	float min_t = std::numeric_limits<float>::max();
-	float max_t = std::numeric_limits<float>::min();
+	std::vector<Eigen::Vector3d> projected_points;
+	double min_t = std::numeric_limits<double>::max();
+	double max_t = std::numeric_limits<double>::min();
 
 	for (const auto& point : cloud->points) {
-		Eigen::Vector3f q(point.x, point.y, point.z);
-		float t = (q - p).dot(d) / d.dot(d);
-		Eigen::Vector3f r = p + t * d;
+		Eigen::Vector3d q(point.x, point.y, point.z);
+		double t = (q - p).dot(d) / d.dot(d);
+		Eigen::Vector3d r = p + t * d;
 		projected_points.push_back(r);
 
 		if (t < min_t) min_t = t;
 		if (t > max_t) max_t = t;
 	}
 
-	Eigen::Vector3f endpoint1 = p + min_t * d;
-	Eigen::Vector3f endpoint2 = p + max_t * d;
-	float length = (endpoint2 - endpoint1).norm();
+	Eigen::Vector3d endpoint1 = p + min_t * d;
+	Eigen::Vector3d endpoint2 = p + max_t * d;
+	double length = (endpoint2 - endpoint1).norm();
 
 	std::cout << "原点: (" << endpoint1[0] << ", " << endpoint1[1] << ", " << endpoint1[2] << ")\n";
 	std::cout << "方向: (" << params[3] << ", " << params[4] << ", " << params[5] << ")\n";

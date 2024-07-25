@@ -3,7 +3,7 @@
   <ImportGroup Label="PropertySheets" />
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup />
-  <ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <AdditionalIncludeDirectories>E:\Repository\Ceres\Install\include;E:\Repository\Ceres\Install\include\glog;</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;_SILENCE_CXX23_DENORM_DEPRECATION_WARNING;_SILENCE_CXX23_ALIGNED_STORAGE_DEPRECATION_WARNING;_VARIADIC_MAX=10;NOMINMAX;GLOG_USE_GLOG_EXPORT;GLOG_USE_GFLAGS;GLOG_NO_ABBREVIATED_SEVERITIES;GFLAGS_IS_A_DLL=1;CMAKE_INTDIR="Debug";%(PreprocessorDefinitions)</PreprocessorDefinitions>
@@ -12,6 +12,16 @@
     <Link>
       <AdditionalLibraryDirectories>E:\Repository\Ceres\Install\lib\Debug;</AdditionalLibraryDirectories>
       <AdditionalDependencies>ceres-debug.lib;glogd.lib;gflags_debug.lib;$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>E:\Repository\Ceres\Install\include;E:\Repository\Ceres\Install\include\glog;</AdditionalIncludeDirectories>
+	  <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;_SCL_SECURE_NO_WARNINGS;_SILENCE_FPOS_SEEKPOS_DEPRECATION_WARNING;GOOGLE_GLOG_DLL_DECL=;CRT_SECURE_NO_DEPRECATE;CRT_SECURE_NO_WARNINGS;GLOG_USE_GLOG_EXPORT;GLOG_NO_ABBREVIATED_SEVERITIES;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <AdditionalLibraryDirectories>E:\Repository\Ceres\Install\lib;</AdditionalLibraryDirectories>
+      <AdditionalDependencies>ceres.lib;glog.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup />
