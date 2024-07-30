@@ -34,15 +34,18 @@ struct EllipseResidual1 {
 	bool operator()(const T* const params, T* residual) const {
 		// 计算椭圆平面的正交基向量v
 		Eigen::Matrix<T, 3, 1> n(params[5], params[6], params[7]);
-		Eigen::Matrix<T, 3, 1> u_vec(params[8], params[9], params[10]);
-		Eigen::Matrix<T, 3, 1> v = n.cross(u_vec).normalized();
+		Eigen::Matrix<T, 3, 1> u(params[8], params[9], params[10]);
+
+		n.normalize();
+		u = (u - (u.dot(n) * n)).normalized();  // 矩形的U轴归一化
+		Eigen::Matrix<T, 3, 1> v = n.cross(u);  // 矩形的V轴，保证垂直于U和法向量
 
 		// 计算点到椭圆的最近点
 		Eigen::Matrix<T, 3, 1> c(params[0], params[1], params[2]);
 		T theta = T(0.0);
 		T min_distance = std::numeric_limits<T>::max();
 		for (T t = T(0.0); t < T(2.0 * M_PI); t += T(0.01)) {
-			Eigen::Matrix<T, 3, 1> p = c + params[3] * cos(t) * u_vec + params[4] * sin(t) * v;
+			Eigen::Matrix<T, 3, 1> p = c + params[3] * cos(t) * u + params[4] * sin(t) * v;
 			T distance = (point_.cast<T>() - p).squaredNorm();
 			if (distance < min_distance) {
 				min_distance = distance;
@@ -51,7 +54,7 @@ struct EllipseResidual1 {
 		}
 
 		// 计算最近点的残差
-		Eigen::Matrix<T, 3, 1> p = c + params[3] * cos(theta) * u_vec + params[4] * sin(theta) * v;
+		Eigen::Matrix<T, 3, 1> p = c + params[3] * cos(theta) * u + params[4] * sin(theta) * v;
 		residual[0] = point_[0] - p[0];
 		residual[1] = point_[1] - p[1];
 		residual[2] = point_[2] - p[2];
@@ -122,7 +125,12 @@ struct EllipseResidualX {
 		Eigen::Matrix<T, 3, 1> diff = point_.cast<T>() - center;
 
 		// 计算法向量的正交向量
-		Eigen::Matrix<T, 3, 1> v_axis = normal.cross(u_axis);    // .normalized();
+		normal.normalize();
+		u_axis = (u_axis - (u_axis.dot(normal) * normal)).normalized();  // 矩形的U轴归一化
+		Eigen::Matrix<T, 3, 1> v_axis = normal.cross(u_axis);  // 矩形的V轴，保证垂直于U和法向量
+
+		// 投影点到矩形平面的距离
+		T distance_to_plane = (diff).dot(normal);
 
 		// 旋转u_axis，使其与diff对齐
 		Eigen::Matrix<T, 3, 1> rotated_diff(diff.dot(u_axis), diff.dot(v_axis), diff.dot(normal));  //使用这三个向量（u轴、v轴和法向量）将diff向量旋转到一个新的坐标系（这实际上是找到diff在椭圆主轴坐标系下的坐标）。
@@ -131,8 +139,9 @@ struct EllipseResidualX {
 		T ellipse_distance = (rotated_diff[0] * rotated_diff[0]) / (a * a) +
 			(rotated_diff[1] * rotated_diff[1]) / (b * b);
 
-		residuals[0] = ellipse_distance - T(1.0);
-
+		T dist = ellipse_distance - T(1.0);
+		//residuals[0] = ellipse_distance - T(1.0);
+		residuals[0] = ceres::sqrt(distance_to_plane * distance_to_plane + dist * dist);
 		return true;
 	}
 
@@ -142,6 +151,83 @@ struct EllipseResidualX {
 	}
 
 	Eigen::Vector3d point_;
+};
+
+// 定义点结构体
+struct EllipseFittingCostFunctor {
+	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+	EllipseFittingCostFunctor(const Eigen::Vector3d& point) : point_(point) {}
+
+	template <typename T>
+	bool operator()(const T* const ellipse_params, T* residual) const {
+		// 定义输入参数
+		Eigen::Matrix<T, 3, 1> p(T(point_.x()), T(point_.y()), T(point_.z()));
+		Eigen::Matrix<T, 3, 1> c(ellipse_params[0], ellipse_params[1], ellipse_params[2]);
+		Eigen::Matrix<T, 3, 1> normal(ellipse_params[5], ellipse_params[6], ellipse_params[7]);
+		Eigen::Matrix<T, 3, 1> u(ellipse_params[8], ellipse_params[9], ellipse_params[10]);
+
+		T length_u = ceres::abs(ellipse_params[3]);  // 椭圆长轴
+		T length_v = ceres::abs(ellipse_params[4]);  // 椭圆短轴
+
+		// 归一化向量
+		normal.normalize();
+		u = (u - (u.dot(normal) * normal)).normalized();  
+		Eigen::Matrix<T, 3, 1> v = normal.cross(u);  
+
+		// 投影点到矩形平面的距离
+		T distance_to_plane = (p - c).dot(normal);
+
+		// 计算投影点
+		Eigen::Matrix<T, 3, 1> proj_point = p - distance_to_plane * normal;
+
+		// 矩形中心到投影点的向量
+		Eigen::Matrix<T, 3, 1> c_to_proj = proj_point - c;
+
+		// 在矩形边上的投影分量
+		T u_proj = c_to_proj.dot(u);
+		T v_proj = c_to_proj.dot(v);
+
+		// 半长度和半宽度
+		T half_length_u = length_u;
+		T half_length_v = length_v;
+
+		// 判定条件
+		T u_dist, v_dist;
+
+		if (ceres::abs(u_proj) <= half_length_u && ceres::abs(v_proj) <= half_length_v) {
+			// 条件 1: 点在矩形内，计算到矩形最近边的距离
+			u_dist = T(1.0) * (half_length_u - ceres::abs(u_proj));
+			v_dist = T(1.0) * (half_length_v - ceres::abs(v_proj));
+			residual[0] = ceres::sqrt(distance_to_plane * distance_to_plane + std::min(u_dist * u_dist, v_dist * v_dist));
+		}
+		else if (ceres::abs(u_proj) > half_length_u && ceres::abs(v_proj) > half_length_v) {
+			// 条件 2: 点在矩形对角外部，计算到矩形角点的距离
+			u_dist = T(1.0) * (ceres::abs(u_proj) - half_length_u);
+			v_dist = T(1.0) * (ceres::abs(v_proj) - half_length_v);
+			residual[0] = ceres::sqrt(distance_to_plane * distance_to_plane + u_dist * u_dist + v_dist * v_dist);
+		}
+		else if (ceres::abs(u_proj) > half_length_u) {
+			// 条件 3: 点在宽度边界外但在长度内，计算到宽边的距离
+			u_dist = T(1.0) * (ceres::abs(u_proj) - half_length_u);
+			residual[0] = ceres::sqrt(distance_to_plane * distance_to_plane + u_dist * u_dist);
+		}
+		else {
+			// 条件 4: 点在长度边界外但在宽度内，计算到长边的距离
+			v_dist = T(1.0) * (ceres::abs(v_proj) - half_length_v);
+			residual[0] = ceres::sqrt(distance_to_plane * distance_to_plane + v_dist * v_dist);
+		}
+
+		return true;
+	}
+
+	static ceres::CostFunction* Create(const Eigen::Vector3d& point) {
+		return (new ceres::AutoDiffCostFunction<EllipseFittingCostFunctor, 1, 11>(
+			new EllipseFittingCostFunctor(point)));
+	}
+
+private:
+	Eigen::Vector3d point_;
+
 };
 
 struct EllipseResidualXX {
@@ -201,7 +287,7 @@ int main()
 {
 	// -------------------------加载点云------------------------------
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
-	if (pcl::io::loadPCDFile("ellipse1.pcd", *cloud) < 0)
+	if (pcl::io::loadPCDFile("ellipse2.pcd", *cloud) < 0)
 	{
 		PCL_ERROR("Couldn't read file \n");
 		return -1;
@@ -270,6 +356,11 @@ int main()
 			ceres::CostFunction* cost_function = EllipseResidual1::Create(point);
 			problem.AddResidualBlock(cost_function, nullptr, params);
 		}	
+		else if (2 == FIT_METHOD)
+		{
+			ceres::CostFunction* cost_function = EllipseFittingCostFunctor::Create(point);
+			problem.AddResidualBlock(cost_function, nullptr, params);
+		}
 	}
 
 	ceres::Solver::Options options;

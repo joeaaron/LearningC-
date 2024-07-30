@@ -320,7 +320,7 @@ int main(int argc, char** argv)
 {
 	// 读取点云数据
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
-	if (pcl::io::loadPCDFile<pcl::PointXYZ>("ConePart1.pcd", *cloud) == -1)		// ConePart.pcd
+	if (pcl::io::loadPCDFile<pcl::PointXYZ>("Cone.pcd", *cloud) == -1)		// ConePart.pcd
 	{
 		PCL_ERROR("Couldn't read file cone.pcd \n");
 		return -1;
