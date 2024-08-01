@@ -37,6 +37,14 @@ enum HullPointFlags {
 	POINT_FROZEN = 3,
 };
 
+// Axis dir
+enum class AxisDir
+{
+	Axis_X = 0,
+	Axis_Y,
+	Axis_Z
+};
+
 namespace
 {
 	struct Edge
@@ -586,10 +594,47 @@ CCPolyline* ExtractFlatEnvelope(PointCloud* points,
 	return envelopePolyline;
 }
 
+inline Eigen::Vector4d CalcPlane(Eigen::Vector3d center, Eigen::Vector3d normal)
+{
+	Eigen::Vector4d planeEquation;
+
+	// 计算平面方程中的 d
+	double d = normal.dot(center);
+	planeEquation << normal, -d;
+
+	return planeEquation;
+}
+
+void GetSlice(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud, const Eigen::Vector4d& n)
+{
+	double delta = 1;			// 设置切片的0.5倍厚度,厚度和点云密度相关
+	std::vector<int> pointIdx;
+
+	for (int i = 0; i < cloud->size(); ++i)
+	{
+		double wr = n[0] * (*cloud)[i].x + n[1] * (*cloud)[i].y + n[2] * (*cloud)[i].z + n[3] - delta;
+		double wl = n[0] * (*cloud)[i].x + n[1] * (*cloud)[i].y + n[2] * (*cloud)[i].z + n[3] + delta;
+		if (wr * wl <= 0)
+		{
+			pointIdx.emplace_back(i);
+		}
+	}
+
+	pcl::PointCloud<pcl::PointXYZ>::Ptr sliceCloud(new pcl::PointCloud<pcl::PointXYZ>);
+	pcl::copyPointCloud(*cloud, pointIdx, *sliceCloud);
+
+	// ****************************包围盒内点云显示******************************
+	pcl::visualization::CloudViewer viewer("CropBox Viewer");
+	viewer.showCloud(sliceCloud);
+
+	// 等待直到视图关闭
+	while (!viewer.wasStopped()) {}
+}
+
 int main() {
 	// ****************************获取数据******************************
 	pcl::PointCloud<pcl::PointXYZ>::Ptr pc(new pcl::PointCloud<pcl::PointXYZ>);
-	std::string fnameS = R"(bunny.pcd)";
+	std::string fnameS = R"(pmt.pcd)";
 	//支持pcd与ply两种格式
 	if (fnameS.substr(fnameS.find_last_of('.') + 1) == "pcd") {
 		pcl::io::loadPCDFile(fnameS, *pc);
@@ -597,6 +642,12 @@ int main() {
 	else if (fnameS.substr(fnameS.find_last_of('.') + 1) == "ply") {
 		pcl::io::loadPLYFile(fnameS, *pc);
 	}
+
+	// ****************************获取包围盒内的点云******************************
+	Eigen::Vector3d center(-4.349, 0, -12.500);
+	Eigen::Vector3d normal(1, 0, 0);
+	Eigen::Vector4d plane = CalcPlane(center, normal);
+	GetSlice(pc, plane);
 
 	// ****************************转换数据******************************
 	CCCoreLib::PointCloudTpl<PointCloud> ccCloud;
@@ -609,14 +660,33 @@ int main() {
 
 	// ****************************切片算法******************************
 	CCCoreLib::GenericIndexedCloudPersist* points = static_cast<CCCoreLib::GenericIndexedCloudPersist*>(&ccCloud);
-	PointCoordinateType normDir[3] = { 0.0, 0.0, 1.0 };  // 初始化 normDir 数组，包含三个值
-	PointCoordinateType upDir[3] = { 1.0, 0.0, 0.0 };	 // 初始化 upDir 数组，包含三个值
-	PointCoordinateType* preferredNormDir = normDir;
-	PointCoordinateType* preferredUpDir = upDir;
+	AxisDir axis = AxisDir::Axis_X;
 	PointCoordinateType maxEdgeLength = 0.002502;
 
-	CCPolyline* polyLine = ExtractFlatEnvelope(points, maxEdgeLength, preferredNormDir, preferredUpDir);
-
+	if (axis == AxisDir::Axis_Z)
+	{
+		PointCoordinateType normDir[3] = { 0.0, 0.0, 1.0 }; 
+		PointCoordinateType upDir[3] = { 1.0, 0.0, 0.0 };
+		PointCoordinateType* preferredNormDir = normDir;
+		PointCoordinateType* preferredUpDir = upDir;
+		CCPolyline* polyLine = ExtractFlatEnvelope(points, maxEdgeLength, preferredNormDir, preferredUpDir);
+	}
+	else if (axis == AxisDir::Axis_Y)
+	{
+		PointCoordinateType normDir[3] = { 0.0, 1.0, 0.0 };  
+		PointCoordinateType upDir[3] = { 0.0, 0.0, 1.0 };
+		PointCoordinateType* preferredNormDir = normDir;
+		PointCoordinateType* preferredUpDir = upDir;
+		CCPolyline* polyLine = ExtractFlatEnvelope(points, maxEdgeLength, preferredNormDir, preferredUpDir);
+	}
+	else
+	{
+		PointCoordinateType normDir[3] = { 1.0, 0.0, 0.0 }; 
+		PointCoordinateType upDir[3] = { 0.0, 0.0, 1.0 };
+		PointCoordinateType* preferredNormDir = normDir;
+		PointCoordinateType* preferredUpDir = upDir;
+		CCPolyline* polyLine = ExtractFlatEnvelope(points, maxEdgeLength, preferredNormDir, preferredUpDir);
+	}
 	//// ****************************八叉树******************************
 	//float sphereRadius = 10.0f;
 
