@@ -6,6 +6,7 @@
 #include <pcl/io/pcd_io.h>
 #include <omp.h> // 引入OpenMP支持
 #include <pcl/visualization/pcl_visualizer.h>
+#include <pcl/surface/concave_hull.h>
 
 #define ENABLE_DISPLAY 1		// 定义一个宏，用于控制显示状态
 
@@ -84,6 +85,14 @@ int main(int argc, char** argv)
 		projectedCloud->points.push_back(pcl::PointXYZ(xp, yp, zp));
 	}
 
+	// Extract concave hull
+	pcl::ConcaveHull<pcl::PointXYZ> concave_hull;
+	concave_hull.setInputCloud(projectedCloud);
+	concave_hull.setAlpha(0.008);					// Adjust alpha as needed
+
+	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_hull(new pcl::PointCloud<pcl::PointXYZ>);
+	concave_hull.reconstruct(*cloud_hull);
+
 #if ENABLE_DISPLAY
 	//-----------------结果显示---------------------
 	boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer(new pcl::visualization::PCLVisualizer("Cloud boundary extraction - AS"));
@@ -99,7 +108,7 @@ int main(int argc, char** argv)
 	viewer->addText("Sliced point clouds", 10, 10, "v2_text", v2);
 
 	viewer->addPointCloud<pcl::PointXYZ>(cloud, "raw cloud", v1);
-	viewer->addPointCloud<pcl::PointXYZ>(projectedCloud, "sliced cloud", v2);
+	viewer->addPointCloud<pcl::PointXYZ>(cloud_hull, "sliced cloud", v2);
 
 	viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 1, 0, 0, "raw cloud", v1);
 	viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 0, 1, 0, "sliced cloud", v2);

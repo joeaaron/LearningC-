@@ -287,7 +287,7 @@ int main()
 {
 	// -------------------------º”‘ÿµ„‘∆------------------------------
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
-	if (pcl::io::loadPCDFile("ellipse2.pcd", *cloud) < 0)
+	if (pcl::io::loadPCDFile("ellipse1.pcd", *cloud) < 0)
 	{
 		PCL_ERROR("Couldn't read file \n");
 		return -1;
