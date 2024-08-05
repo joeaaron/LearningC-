@@ -7,6 +7,7 @@
 #include <CCCoreLib/Polyline.h>
 #include <CCCoreLib/PointProjectionTools.h>
 #include <CCCoreLib/CCTypes.h>
+#include <pcl/io/vtk_lib_io.h>
 
 #ifdef CC_CORE_LIB_USES_TBB
 #include <tbb/parallel_for.h>
@@ -685,10 +686,18 @@ double CalcBoxDis(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud)
 	return dLength;
 }
 
+bool Mesh2CloudPCL(pcl::PointCloud<pcl::PointXYZ>& cloudOut,
+	const pcl::PolygonMesh& mesh)
+{
+	pcl::fromPCLPointCloud2(mesh.cloud, cloudOut);
+	return true;
+}
+
 int main() {
 	// ****************************获取数据******************************
 	pcl::PointCloud<pcl::PointXYZ>::Ptr pc(new pcl::PointCloud<pcl::PointXYZ>);
-	std::string fnameS = R"(pmt.pcd)";   //pmt.pcd | bunny.pcd | Testcase01.pcd
+	pcl::PolygonMesh mesh;
+	std::string fnameS = R"(test.stl)";   //pmt.pcd | bunny.pcd | Testcase01.pcd
 	//支持pcd与ply两种格式
 	if (fnameS.substr(fnameS.find_last_of('.') + 1) == "pcd") {
 		pcl::io::loadPCDFile(fnameS, *pc);
@@ -696,12 +705,17 @@ int main() {
 	else if (fnameS.substr(fnameS.find_last_of('.') + 1) == "ply") {
 		pcl::io::loadPLYFile(fnameS, *pc);
 	}
+	else if (fnameS.substr(fnameS.find_last_of('.') + 1) == "stl") {
+		pcl::io::loadPolygonFileSTL(fnameS, mesh);
+	}
 
+	Mesh2CloudPCL(*pc, mesh);
 	// ****************************获取包围盒内的点云******************************
 	//Eigen::Vector3d center(-4.349, 0, -12.500);   //(88.328, 0.000, 4.938) | (-4.349, 0, -12.500);  testcase1 | PMT
 	//Eigen::Vector3d normal(1, 0, 0);
 
-	Eigen::Vector3d center(-0.001, 0, -18.660);   
+	//Eigen::Vector3d center(-0.001, 0, -18.660); 
+	Eigen::Vector3d center(377.767, -409.888, 395.581);
 	Eigen::Vector3d normal(0, 0, 1);
 
 	Eigen::Vector4d plane = CalcPlane(center, normal);
