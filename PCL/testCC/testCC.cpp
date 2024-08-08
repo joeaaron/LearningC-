@@ -7,7 +7,6 @@
 #include <CCCoreLib/Polyline.h>
 #include <CCCoreLib/PointProjectionTools.h>
 #include <CCCoreLib/CCTypes.h>
-#include <pcl/io/vtk_lib_io.h>
 
 #ifdef CC_CORE_LIB_USES_TBB
 #include <tbb/parallel_for.h>
@@ -24,6 +23,9 @@
 #include <pcl/common/io.h>
 #include <pcl/common/common.h>
 #include <pcl/visualization/cloud_viewer.h>
+#include <pcl/filters/extract_indices.h>
+#include <pcl/io/vtk_lib_io.h>
+#include <pcl/segmentation/extract_clusters.h>
 
 using PointCloud = CCCoreLib::GenericIndexedCloudPersist;
 using CCPolyline = CCCoreLib::Polyline;
@@ -506,7 +508,8 @@ CCPolyline* ExtractFlatEnvelope(PointCloud* points,
 
 	if (preferredNormDim != nullptr)
 	{
-		const CCVector3* G = points->getPoint(0); //any point through which the plane passes is ok
+		//const CCVector3* G = points->getPoint(0); //any point through which the plane passes is ok
+		const CCVector3* G = new CCVector3(-13.572, 0, -12.500);  // 通过平面中心点
 		preferredPlaneEq[0] = preferredNormDim[0];
 		preferredPlaneEq[1] = preferredNormDim[1];
 		preferredPlaneEq[2] = preferredNormDim[2];
@@ -575,7 +578,7 @@ CCPolyline* ExtractFlatEnvelope(PointCloud* points,
 
 	// 遍历 polyline 的顶点，并将其添加到 PCL 点云对象中
 	int nSize = envVertices->size();
-	cloud->points.resize(nSize);
+	cloud->points.reserve(nSize);
 	for (unsigned int i = 0; i < nSize; ++i)
 	{
 		CCVector3 point;
@@ -583,15 +586,47 @@ CCPolyline* ExtractFlatEnvelope(PointCloud* points,
 		cloud->points.push_back(pcl::PointXYZ(point.x, point.y, point.z));
 	}
 
-	cloud->width = cloud->points.size();
-	cloud->height = 1;
-	cloud->is_dense = true;
-	// 使用 PCL 可视化工具显示点云
-	pcl::visualization::CloudViewer viewer("Polyline Viewer");
-	viewer.showCloud(cloud);
+	// 创建KD-Tree对象用于搜索
+	pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
+	tree->setInputCloud(cloud);
 
-	// 等待直到视图关闭
-	while (!viewer.wasStopped()) {}
+	// 欧几里德聚类提取器
+	std::vector<pcl::PointIndices> cluster_indices;
+	pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
+	ec.setClusterTolerance(3);		// 设置近邻搜索的搜索半径
+	ec.setMinClusterSize(200);		// 设置一个聚类需要的最少点数目
+	ec.setMaxClusterSize(1000);		// 设置一个聚类需要的最大点数目
+	ec.setSearchMethod(tree);
+	ec.setInputCloud(cloud);
+	ec.extract(cluster_indices);
+
+	std::vector < pcl::PointCloud<pcl::PointXYZ>> vCloud;
+	for (const auto& indices : cluster_indices) 
+	{
+		pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_cluster(new pcl::PointCloud<pcl::PointXYZ>);
+		for (const auto& index : indices.indices)
+			cloud_cluster->points.push_back(cloud->points[index]);
+
+		vCloud.emplace_back(*cloud_cluster);
+
+		cloud_cluster->width = cloud_cluster->points.size();
+		cloud_cluster->height = 1;
+		cloud_cluster->is_dense = true;
+
+		// 使用 PCL 可视化工具显示点云
+		pcl::visualization::CloudViewer viewer("Polyline Viewer");
+		viewer.showCloud(cloud_cluster);
+
+		// 等待直到视图关闭
+		while (!viewer.wasStopped()) {}
+	}
+	
+	// 使用 PCL 可视化工具显示点云
+	//pcl::visualization::CloudViewer viewer("Polyline Viewer");
+	//viewer.showCloud(cloud);
+
+	//// 等待直到视图关闭
+	//while (!viewer.wasStopped()) {}
 
 	return envelopePolyline;
 }
@@ -609,7 +644,7 @@ inline Eigen::Vector4d CalcPlane(Eigen::Vector3d center, Eigen::Vector3d normal)
 
 void GetSlice(pcl::PointCloud<pcl::PointXYZ>::Ptr& sliceCloud, const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud, const Eigen::Vector4d& n)
 {
-	double delta = 0.5;			// 设置切片的0.5倍厚度,厚度和点云密度相关
+	double delta = 2;			// 设置切片的0.5倍厚度,厚度和点云密度相关
 	std::vector<int> pointIdx;
 
 	for (int i = 0; i < cloud->size(); ++i)
@@ -623,7 +658,8 @@ void GetSlice(pcl::PointCloud<pcl::PointXYZ>::Ptr& sliceCloud, const pcl::PointC
 	}
 
 	pcl::copyPointCloud(*cloud, pointIdx, *sliceCloud);
-
+	pcl::PCDWriter writer;
+	writer.write("sliceCloud.pcd", *sliceCloud, false);
 	// ****************************包围盒内点云显示******************************
 	pcl::visualization::CloudViewer viewer("CropBox Viewer");
 	viewer.showCloud(sliceCloud);
@@ -697,7 +733,7 @@ int main() {
 	// ****************************获取数据******************************
 	pcl::PointCloud<pcl::PointXYZ>::Ptr pc(new pcl::PointCloud<pcl::PointXYZ>);
 	pcl::PolygonMesh mesh;
-	std::string fnameS = R"(test.stl)";   //pmt.pcd | bunny.pcd | Testcase01.pcd
+	std::string fnameS = R"(Testcase02.pcd)";   //pmt.pcd | bunny.pcd | Testcase01.pcd | test.stl | Testcase02.pcd
 	//支持pcd与ply两种格式
 	if (fnameS.substr(fnameS.find_last_of('.') + 1) == "pcd") {
 		pcl::io::loadPCDFile(fnameS, *pc);
@@ -709,14 +745,16 @@ int main() {
 		pcl::io::loadPolygonFileSTL(fnameS, mesh);
 	}
 
-	Mesh2CloudPCL(*pc, mesh);
+	//Mesh2CloudPCL(*pc, mesh);
 	// ****************************获取包围盒内的点云******************************
 	//Eigen::Vector3d center(-4.349, 0, -12.500);   //(88.328, 0.000, 4.938) | (-4.349, 0, -12.500);  testcase1 | PMT
-	//Eigen::Vector3d normal(1, 0, 0);
+	//Eigen::Vector3d center(0, 0, -12.500);
+	Eigen::Vector3d center(-13.572, 0, -12.500);
+	Eigen::Vector3d normal(1, 0, 0);
 
 	//Eigen::Vector3d center(-0.001, 0, -18.660); 
-	Eigen::Vector3d center(377.767, -409.888, 395.581);
-	Eigen::Vector3d normal(0, 0, 1);
+	//Eigen::Vector3d center(377.767, -409.888, 395.581);
+	//Eigen::Vector3d normal(0, 0, 1);
 
 	Eigen::Vector4d plane = CalcPlane(center, normal);
 
@@ -724,7 +762,7 @@ int main() {
 	GetSlice(sliceCloud, pc, plane);
 
 	// 根据包围盒对角线距离设置maxEdgeLength
-	PointCoordinateType maxEdgeLength = CalcBoxDis(sliceCloud) / 100.0;
+	PointCoordinateType maxEdgeLength = CalcBoxDis(sliceCloud) / 100.0;   //2.655282;
 
 	// ****************************转换数据******************************
 	CCCoreLib::PointCloudTpl<PointCloud> ccCloud;
@@ -737,8 +775,7 @@ int main() {
 
 	// ****************************切片算法******************************
 	PointCloud* points = static_cast<PointCloud*>(&ccCloud);
-	AxisDir axis = AxisDir::Axis_Z;
-	//PointCoordinateType maxEdgeLength = 0.002502;
+	AxisDir axis = AxisDir::Axis_X;
 
 	PointCoordinateType* preferredNormDir = nullptr;
 	PointCoordinateType* preferredUpDir = nullptr;
