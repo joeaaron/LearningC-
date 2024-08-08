@@ -68,6 +68,70 @@ namespace
 		unsigned nearestPointIndex;
 		float nearestPointSquareDist;
 	};
+
+	void SavePointsToFile(const std::vector<Eigen::Vector2d>& points, const std::string& filename)
+	{
+		std::ofstream outFile(filename);
+		if (!outFile.is_open()) {
+			std::cerr << "Error opening file: " << filename << std::endl;
+			return;
+		}
+
+		// Write each point to the file
+		for (const auto& point : points) {
+			outFile << point[0] << " " << point[1] << "\n";
+		}
+
+		outFile.close();
+		std::cout << "Points saved to " << filename << std::endl;
+	}
+
+	bool Compare(const Eigen::Vector2d& a, const Eigen::Vector2d& b) 
+	{
+		//if (a.x() != b.x()) return a.x() < b.x();
+		//return a.y() < b.y();
+		return a.x() < b.x() || (a.x() == b.x() && a.y() < b.y());
+	}
+
+	double CrossProduct(const Eigen::Vector2d& o, const Eigen::Vector2d& a, const Eigen::Vector2d& b) 
+	{
+		return (a - o).x() * (b - o).y() - (a - o).y() * (b - o).x();
+	}
+
+	std::vector<Eigen::Vector2d> ConvexHull(std::vector<Eigen::Vector2d> points) 
+	{
+		// 1. 排序点
+		std::sort(points.begin(), points.end(), Compare);
+
+		// 2. 构建下半部分
+		std::vector<Eigen::Vector2d> lower;
+		for (const auto& p : points) {
+			while (lower.size() >= 2 && CrossProduct(lower[lower.size() - 2], lower.back(), p) < 0)
+			{
+				lower.pop_back();
+			}
+			lower.push_back(p);
+		}
+
+		// 3. 构建上半部分
+		std::vector<Eigen::Vector2d> upper;
+		for (auto it = points.rbegin(); it != points.rend(); ++it) 
+		{
+			const auto& p = *it;
+			while (upper.size() >= 2 && CrossProduct(upper[upper.size() - 2], upper.back(), p) < 0) 
+			{
+				upper.pop_back();
+			}
+			upper.push_back(p);
+		}
+
+		// 4. 合并结果（去除重复的端点）
+		lower.pop_back();
+		upper.pop_back();
+		lower.insert(lower.end(), upper.begin(), upper.end());
+
+		return lower;
+	}
 }
 
 //! Finds the nearest (available) point to an edge
@@ -211,6 +275,15 @@ bool ExtractConcaveHull2D(std::vector<Vertex2D>& points,
 	if (!CCCoreLib::PointProjectionTools::extractConvexHull2D(points, hullPoints))
 		return false;
 
+	//std::vector<Eigen::Vector2d> v2DPoints;
+	//for (auto vertex : hullPoints) 
+	//{
+	//	Eigen::Vector2d point(vertex->x, vertex->y);
+	//	v2DPoints.push_back(point);
+	//}
+
+	//SavePointsToFile(v2DPoints, "Hull points.txt");
+	
 	if (hullPoints.size() < 2 || maxSquareEdgeLength < 0)
 		return true;
 
@@ -469,6 +542,37 @@ bool ExtractConcaveHull2D(std::vector<Vertex2D>& points,
 	return true;
 }
 
+// 计算相邻点之间的距离，并根据阈值判断
+std::vector<bool> CheckDistances(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud, double threshold) 
+{
+	size_t numPoints = cloud->points.size();
+	std::vector<bool> distancesValid(numPoints);
+
+	if (numPoints < 2) {
+		std::cerr << "Not enough points to compute distances." << std::endl;
+		return distancesValid;
+	}
+
+#pragma omp parallel for
+	for (int i = 0; i < numPoints; ++i) 
+	{
+		size_t nextIndex = (i + 1) % numPoints; // 最后一个点与第一个点相连
+		const pcl::PointXYZ& pt1 = cloud->points[i];
+		const pcl::PointXYZ& pt2 = cloud->points[nextIndex];
+
+		double distance = std::sqrt(
+			std::pow(pt1.x - pt2.x, 2) +
+			std::pow(pt1.y - pt2.y, 2) +
+			std::pow(pt1.z - pt2.z, 2)
+		);
+
+		// 判断距离是否在阈值范围内
+		distancesValid[i] = (distance <= threshold);
+	}
+
+	return distancesValid;
+}
+
 CCPolyline* ExtractFlatEnvelope(PointCloud* points,
 	PointCoordinateType maxEdgeLength,
 	const PointCoordinateType* preferredNormDim/*=nullptr*/,
@@ -509,7 +613,7 @@ CCPolyline* ExtractFlatEnvelope(PointCloud* points,
 	if (preferredNormDim != nullptr)
 	{
 		//const CCVector3* G = points->getPoint(0); //any point through which the plane passes is ok
-		const CCVector3* G = new CCVector3(-13.572, 0, -12.500);  // 通过平面中心点
+		const CCVector3* G = new CCVector3(1.321, 0, -12.500);  // 通过平面中心点
 		preferredPlaneEq[0] = preferredNormDim[0];
 		preferredPlaneEq[1] = preferredNormDim[1];
 		preferredPlaneEq[2] = preferredNormDim[2];
@@ -530,6 +634,17 @@ CCPolyline* ExtractFlatEnvelope(PointCloud* points,
 	{
 		return nullptr;
 	}
+
+	// 调试用
+	std::vector<Eigen::Vector2d> v2DPoints;
+	for (int i = 0; i < points2D.size(); ++i)
+	{
+		v2DPoints.emplace_back(Eigen::Vector2d(points2D[i].x, points2D[i].y));
+	}
+	SavePointsToFile(v2DPoints, "Projected points.txt");
+
+	std::vector<Eigen::Vector2d> vHullPoints = ConvexHull(v2DPoints);
+	SavePointsToFile(vHullPoints, "Hulled points.txt");
 
 	//update the points indexes (not done by Neighbourhood::projectPointsOn2DPlane)
 	{
@@ -594,13 +709,13 @@ CCPolyline* ExtractFlatEnvelope(PointCloud* points,
 	std::vector<pcl::PointIndices> cluster_indices;
 	pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
 	ec.setClusterTolerance(3);		// 设置近邻搜索的搜索半径
-	ec.setMinClusterSize(200);		// 设置一个聚类需要的最少点数目
+	ec.setMinClusterSize(150);		// 设置一个聚类需要的最少点数目
 	ec.setMaxClusterSize(1000);		// 设置一个聚类需要的最大点数目
 	ec.setSearchMethod(tree);
 	ec.setInputCloud(cloud);
 	ec.extract(cluster_indices);
 
-	std::vector < pcl::PointCloud<pcl::PointXYZ>> vCloud;
+	std::vector<pcl::PointCloud<pcl::PointXYZ>> vCloud;
 	for (const auto& indices : cluster_indices) 
 	{
 		pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_cluster(new pcl::PointCloud<pcl::PointXYZ>);
@@ -621,13 +736,31 @@ CCPolyline* ExtractFlatEnvelope(PointCloud* points,
 		while (!viewer.wasStopped()) {}
 	}
 	
+	// 计算相邻点距离
+	double threshold = 1.5;				// 设置采样间距
+	std::vector<bool> validDistances = CheckDistances(cloud, threshold);
+
+	// 输出结果
+	for (size_t i = 0; i < validDistances.size(); ++i) 
+	{
+		std::cout << "Distance between point " << i << " and " << ((i + 1) % cloud->points.size()) << " is ";
+		if (validDistances[i]) 
+		{
+			std::cout << "within threshold" << std::endl;
+		}
+		else {
+			std::cout << "out of threshold" << std::endl;
+		}
+	}
+
+	/*
 	// 使用 PCL 可视化工具显示点云
-	//pcl::visualization::CloudViewer viewer("Polyline Viewer");
-	//viewer.showCloud(cloud);
+	pcl::visualization::CloudViewer viewer("Polyline Viewer");
+	viewer.showCloud(cloud);
 
-	//// 等待直到视图关闭
-	//while (!viewer.wasStopped()) {}
-
+	// 等待直到视图关闭
+	while (!viewer.wasStopped()) {}
+	*/
 	return envelopePolyline;
 }
 
@@ -729,11 +862,12 @@ bool Mesh2CloudPCL(pcl::PointCloud<pcl::PointXYZ>& cloudOut,
 	return true;
 }
 
-int main() {
+int main() 
+{
 	// ****************************获取数据******************************
 	pcl::PointCloud<pcl::PointXYZ>::Ptr pc(new pcl::PointCloud<pcl::PointXYZ>);
 	pcl::PolygonMesh mesh;
-	std::string fnameS = R"(Testcase02.pcd)";   //pmt.pcd | bunny.pcd | Testcase01.pcd | test.stl | Testcase02.pcd
+	std::string fnameS = R"(pmt.pcd)";   //pmt.pcd | bunny.pcd | Testcase01.pcd | test.stl | Testcase02.pcd
 	//支持pcd与ply两种格式
 	if (fnameS.substr(fnameS.find_last_of('.') + 1) == "pcd") {
 		pcl::io::loadPCDFile(fnameS, *pc);
@@ -749,7 +883,7 @@ int main() {
 	// ****************************获取包围盒内的点云******************************
 	//Eigen::Vector3d center(-4.349, 0, -12.500);   //(88.328, 0.000, 4.938) | (-4.349, 0, -12.500);  testcase1 | PMT
 	//Eigen::Vector3d center(0, 0, -12.500);
-	Eigen::Vector3d center(-13.572, 0, -12.500);
+	Eigen::Vector3d center(1.321, 0, -12.500);
 	Eigen::Vector3d normal(1, 0, 0);
 
 	//Eigen::Vector3d center(-0.001, 0, -18.660); 
@@ -766,7 +900,8 @@ int main() {
 
 	// ****************************转换数据******************************
 	CCCoreLib::PointCloudTpl<PointCloud> ccCloud;
-	for (int i = 0; i < sliceCloud->points.size(); i++) {
+	for (int i = 0; i < sliceCloud->points.size(); i++) 
+	{
 		ccCloud.addPoint(CCVector3(sliceCloud->points[i].x,
 			sliceCloud->points[i].y, sliceCloud->points[i].z));
 	}

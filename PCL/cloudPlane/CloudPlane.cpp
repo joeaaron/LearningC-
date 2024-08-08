@@ -11,6 +11,7 @@
 #include <pcl/common/centroid.h>
 #include <pcl/segmentation/sac_segmentation.h>
 #include <pcl/filters/extract_indices.h>
+#include <pcl/visualization/cloud_viewer.h>
 #include <chrono>
 
 #define ENABLE_DISPLAY	  1					// 定义一个宏，用于控制显示状态
@@ -289,12 +290,52 @@ void LeastSquareFit(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
 
 }
 
+void ProjPointsToPlane(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
+{
+	// 平面中心和法向量
+	Eigen::Vector3f planeNormal(1, 0, 0);
+	Eigen::Vector3f planeCenter(1.321, 0, -12.500);
+
+	// Normalize the plane normal
+	planeNormal.normalize();
+
+	// Compute the projection matrix M
+	Eigen::Matrix3f M = Eigen::Matrix3f::Identity() - (1.0 / planeNormal.dot(planeNormal)) * planeNormal * planeNormal.transpose();
+
+	// Project each point in the input cloud
+	pcl::PointCloud<pcl::PointXYZ>::Ptr projectedCloud(new pcl::PointCloud<pcl::PointXYZ>());
+	for (size_t i = 0; i < cloud->points.size(); ++i) 
+	{
+		pcl::PointXYZ point = cloud->points[i];
+
+		// Vector from plane center to the point
+		Eigen::Vector3f vector_to_point(point.x - planeCenter[0], point.y - planeCenter[1], point.z - planeCenter[2]);
+
+		// Calculate projected point
+		Eigen::Vector3f projected_point = point.getVector3fMap() - (planeNormal.dot(vector_to_point) / planeNormal.dot(planeNormal)) * planeNormal;
+
+		// Store the projected point in the output cloud
+		pcl::PointXYZ projected_pcl_point;
+		projected_pcl_point.x = projected_point[0];
+		projected_pcl_point.y = projected_point[1];
+		projected_pcl_point.z = projected_point[2];
+		projectedCloud->points.push_back(projected_pcl_point);
+	}
+
+	// ****************************投影点云显示******************************
+	pcl::visualization::CloudViewer viewer("Projected cloud");
+	viewer.showCloud(projectedCloud);
+
+	// 等待直到视图关闭
+	while (!viewer.wasStopped()) {}
+}
+
 int
 main(int argc, char** argv)
 {
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
 
-	if (pcl::io::loadPCDFile<pcl::PointXYZ>("table_scene_lms400.pcd", *cloud) == -1)		// sac_plane_test.pcd | Scan_0511_1713.pcd
+	if (pcl::io::loadPCDFile<pcl::PointXYZ>("sliceCloud.pcd", *cloud) == -1)		// sac_plane_test.pcd | Scan_0511_1713.pcd | table_scene_lms400.pcd
 	{
 		PCL_ERROR("点云读取失败 \n");
 		return (-1);
@@ -305,23 +346,29 @@ main(int argc, char** argv)
 	//	PCL_ERROR("点云读取失败 \n");
 	//	return (-1);
 	//}
-	auto startOp1 = std::chrono::high_resolution_clock::now();
-	RANSCAPlaneFit(cloud);
-	auto endOp1 = std::chrono::high_resolution_clock::now();
-	std::chrono::duration<double> elapsedOp1 = endOp1 - startOp1;
-	std::cout << "RANSAC平面拟合: " << elapsedOp1.count() << " seconds" << std::endl;
+	//auto startOp1 = std::chrono::high_resolution_clock::now();
+	//RANSCAPlaneFit(cloud);
+	//auto endOp1 = std::chrono::high_resolution_clock::now();
+	//std::chrono::duration<double> elapsedOp1 = endOp1 - startOp1;
+	//std::cout << "RANSAC平面拟合: " << elapsedOp1.count() << " seconds" << std::endl;
 
-	auto startOp2 = std::chrono::high_resolution_clock::now();
-	SEGPlaneFit(cloud);
-	auto endOp2 = std::chrono::high_resolution_clock::now();
-	std::chrono::duration<double> elapsedOp2 = endOp2 - startOp2;
-	std::cout << "RANSAC分割拟合: " << elapsedOp2.count() << " seconds" << std::endl;
+	//auto startOp2 = std::chrono::high_resolution_clock::now();
+	//SEGPlaneFit(cloud);
+	//auto endOp2 = std::chrono::high_resolution_clock::now();
+	//std::chrono::duration<double> elapsedOp2 = endOp2 - startOp2;
+	//std::cout << "RANSAC分割拟合: " << elapsedOp2.count() << " seconds" << std::endl;
 
-	auto startOp3 = std::chrono::high_resolution_clock::now();
-	LeastSquareFit(cloud);
-	auto endOp3 = std::chrono::high_resolution_clock::now();
-	std::chrono::duration<double> elapsedOp3 = endOp3 - startOp3;
-	std::cout << "最小二乘平面拟合: " << elapsedOp3.count() << " seconds" << std::endl;
+	//auto startOp3 = std::chrono::high_resolution_clock::now();
+	//LeastSquareFit(cloud);
+	//auto endOp3 = std::chrono::high_resolution_clock::now();
+	//std::chrono::duration<double> elapsedOp3 = endOp3 - startOp3;
+	//std::cout << "最小二乘平面拟合: " << elapsedOp3.count() << " seconds" << std::endl;
+
+	auto startOp4 = std::chrono::high_resolution_clock::now();
+	ProjPointsToPlane(cloud);
+	auto endOp4 = std::chrono::high_resolution_clock::now();
+	std::chrono::duration<double> elapsedOp4 = endOp4 - startOp4;
+	std::cout << "三维点投影到平面: " << elapsedOp4.count() << " seconds" << std::endl;
 
     return 0;
 }
