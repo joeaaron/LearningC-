@@ -42,8 +42,8 @@ typedef struct SliceCloudBuf
 {
 	struct
 	{
-		LineSegment lineSeg0;
-		LineSegment lineSeg1;
+		LineSegment lineSeg0;			// 线段端点0
+		LineSegment lineSeg1;			// 线段端点1
 
 		Eigen::Vector3d vec0;			// 切面端点0
 		Eigen::Vector3d vec1;			// 切面端点1

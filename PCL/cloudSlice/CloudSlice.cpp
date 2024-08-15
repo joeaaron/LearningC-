@@ -7,8 +7,10 @@
 #include <omp.h> // 引入OpenMP支持
 #include <pcl/visualization/pcl_visualizer.h>
 #include <pcl/surface/concave_hull.h>
+#include <pcl/surface/convex_hull.h>
 
 #define ENABLE_DISPLAY 1		// 定义一个宏，用于控制显示状态
+using PointT = pcl::PointXYZ;
 
 inline Eigen::Vector4d CalcPlane(const pcl::PointXYZ& a, const pcl::PointXYZ& b, const pcl::PointXYZ& c)
 {
@@ -85,14 +87,15 @@ int main(int argc, char** argv)
 	//	projectedCloud->points.push_back(pcl::PointXYZ(xp, yp, zp));
 	//}
 
+
 	// Extract concave hull
 	pcl::ConcaveHull<pcl::PointXYZ> concave_hull;
 	concave_hull.setInputCloud(cloud);
-	concave_hull.setAlpha(5);					// Adjust alpha as needed
+	concave_hull.setAlpha(5.5);					// Adjust alpha as needed
 
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_hull(new pcl::PointCloud<pcl::PointXYZ>);
 	pcl::PolygonMesh mesh;
-	concave_hull.reconstruct(mesh);
+	concave_hull.reconstruct(*cloud_hull);
 
 #if ENABLE_DISPLAY
 	//-----------------结果显示---------------------
@@ -109,8 +112,8 @@ int main(int argc, char** argv)
 	viewer->addText("Sliced point clouds", 10, 10, "v2_text", v2);
 
 	viewer->addPointCloud<pcl::PointXYZ>(cloud, "raw cloud", v1);
-	//viewer->addPointCloud<pcl::PointXYZ>(cloud_hull, "sliced cloud", v2);
-	viewer->addPolygonMesh(mesh, "mesh cloud", v2);
+	viewer->addPointCloud<pcl::PointXYZ>(cloud_hull, "sliced cloud", v2);
+	//viewer->addPolygonMesh(mesh, "mesh cloud", v2);
 
 	viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 1, 0, 0, "raw cloud", v1);
 	viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 0, 1, 0, "sliced cloud", v2);
@@ -123,6 +126,39 @@ int main(int argc, char** argv)
 		viewer->spinOnce(1000);
 	}
 #endif
+	/*
+	// ***********************三维凸包算法*************************
 
+	pcl::ConvexHull<PointT> convexHull;
+	convexHull.setInputCloud(cloud);
+	convexHull.setDimension(3);
+	convexHull.setComputeAreaVolume(true);
+	//保存凸包中的面要素
+	std::vector<pcl::Vertices> polygons;
+	pcl::PointCloud<PointT>::Ptr surface_hull(new pcl::PointCloud<PointT>);
+	convexHull.reconstruct(*surface_hull, polygons);
+
+	double v = convexHull.getTotalVolume();
+
+	// ****************************可视化******************************
+	auto viewportsVis = [](pcl::PointCloud<pcl::PointXYZ>::ConstPtr cloudS,
+		pcl::PointCloud<PointT>::Ptr surface_hull,
+		std::vector<pcl::Vertices> polygons)
+		{
+			// 创建3D窗口并添加显示点云其包括法线
+			pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> colorS(cloudS, 0, 200, 100);
+
+			boost::shared_ptr<pcl::visualization::PCLVisualizer> viewerVGF(new pcl::visualization::PCLVisualizer("3D Viewer"));
+			viewerVGF->setBackgroundColor(0, 0, 0);
+			//viewerVGF->addPointCloud<pcl::PointXYZ>(cloudS, colorS, "source cloud");
+			//viewerVGF->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 5, "source cloud");
+			viewerVGF->addPolygonMesh<PointT>(surface_hull, polygons, "polyline");
+			viewerVGF->addLine(cloudS->points[cloudS->size() - 1], cloudS->points[0], "line" + std::to_string(cloudS->size() - 1));
+
+			viewerVGF->spin();
+		};
+
+	viewportsVis(cloud, surface_hull, polygons);
+	*/
 	return 0;
 }

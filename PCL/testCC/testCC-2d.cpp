@@ -257,87 +257,6 @@ std::vector<Eigen::Vector2d> RegionGrowthRightSide(const std::vector<Eigen::Vect
 	return result;
 }
 
-
-// 计算向量叉积，判断方向
-bool IsRightSide(const Eigen::Vector3d& currentPoint, 
-	const Eigen::Vector3d& referencePoint, 
-	const Eigen::Vector3d& candidate) 
-{
-	Eigen::Vector3d v1 = currentPoint - referencePoint;
-	Eigen::Vector3d v2 = candidate - referencePoint;
-	Eigen::Vector3d crossProduct = v1.cross(v2);
-	return crossProduct.z() < 0;  // 判断在Z轴上的方向（假设排序方向是逆时针）
-}
-
-// 使用 k-d Tree 查找最近点并进行排序
-PointCloud::Ptr SortPointsUsingKDTree(const PointCloud::Ptr& cloud)
-{
-	// 构建 k-d Tree
-	pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
-	kdtree.setInputCloud(cloud);
-
-	// 结果点集
-	PointCloud::Ptr sortedPoints(new PointCloud);
-
-	// 选择起始点，例如选择最左下角的点
-	pcl::PointXYZ startPoint = cloud->points[0];  // 假设选择第一个点作为起始点
-	sortedPoints->points.push_back(startPoint);
-
-	std::vector<bool> used(cloud->points.size(), false);
-	used[0] = true;
-
-	pcl::PointXYZ currentPoint = startPoint;
-
-	for (size_t i = 1; i < cloud->points.size(); ++i) 
-	{
-		float searchRadius = 0.1f;				// 搜索半径，可根据点云密度调整
-		bool foundValidPoint = false;
-
-		while (!foundValidPoint)
-		{
-			std::vector<int> pointIdxRadiusSearch;
-			std::vector<float> pointRadiusSquaredDistance;
-
-			// kd-tree 半径搜索，控制搜索范围
-			if (kdtree.radiusSearch(currentPoint, searchRadius, pointIdxRadiusSearch, pointRadiusSquaredDistance) <= 0)
-			{
-				searchRadius *= 2;
-			} 
-			else
-			{
-				int nearestIdx = -1;
-				float minDistance = std::numeric_limits<float>::max();
-
-				for (int j = 0; j < pointIdxRadiusSearch.size(); ++j)
-				{
-					int idx = pointIdxRadiusSearch[j];
-					if (!used[idx] && pointRadiusSquaredDistance[j] < minDistance)
-					{
-						nearestIdx = idx;
-						minDistance = pointRadiusSquaredDistance[j];
-					}
-				}
-				// 如果找到合适的最近点
-				if (nearestIdx != -1)
-				{
-					pcl::PointXYZ nearestPoint = cloud->points[nearestIdx];
-					sortedPoints->points.push_back(nearestPoint);
-					used[nearestIdx] = true;
-					currentPoint = nearestPoint;
-					foundValidPoint = true;
-				}
-				else
-				{
-					searchRadius *= 2;
-				}
-			}
-		}
-	}
-
-	return sortedPoints;
-}
-
-
 int main() 
 {
 	// ****************************获取数据******************************
@@ -376,30 +295,68 @@ int main()
 		for (const auto& index : indices.indices)
 			cloud_cluster->points.push_back(pc->points[index]);
 
-		// 进行点排序
-		PointCloud::Ptr sortedPoints = SortPointsUsingKDTree(cloud_cluster);
+		vCloud.emplace_back(cloud_cluster);
+
+		cloud_cluster->width = cloud_cluster->points.size();
+		cloud_cluster->height = 1;
+		cloud_cluster->is_dense = true;
+	}
+
+	double dZ = pc->points[0].z;
+	for (auto& cloud : vCloud)
+	{
+		// 投影到XOY面
+		pcl::ProjectInliers<pcl::PointXYZ> projector;
+		projector.setModelType(pcl::SACMODEL_PLANE);
+		projector.setInputCloud(cloud);
+
+		// 设置投影到 XOY 平面的模型系数
+		pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
+		coefficients->values.resize(4);
+		coefficients->values[0] = 0; // A (X 方向的法向量)
+		coefficients->values[1] = 0; // B (Y 方向的法向量)
+		coefficients->values[2] = 1; // C (Z 方向的法向量，1 表示 Z 轴垂直平面)
+		coefficients->values[3] = 0; // D (平面的 D 参数)
+		projector.setModelCoefficients(coefficients);
+
+		// 执行投影
+		PointCloud::Ptr cloudProjected(new PointCloud);
+		projector.filter(*cloudProjected);
+
+		//创建一个std::vector用于存储 Eigen::Vector2d
+		std::vector<Eigen::Vector2d> vPoints2D;
+		for (const auto& point : cloudProjected->points)
+		{
+			Eigen::Vector2d vec(point.x, point.y);
+			vPoints2D.push_back(vec);
+		}
+
+		auto sortedPoints = RegionGrowthRightSide(vPoints2D);
+		
+		pcl::PointCloud<pcl::PointXYZ>::Ptr polyLine(new pcl::PointCloud<pcl::PointXYZ>);
+		for (int i = 0; i < sortedPoints.size(); ++i)
+		{
+			polyLine->points.emplace_back(sortedPoints[i][0], sortedPoints[i][1], dZ);
+		}
 
 		// 创建可视化器
 		pcl::visualization::PCLVisualizer viewer("Line Viewer");
-
+		
 		// 遍历点云并顺序连接相邻的点
-		for (size_t i = 0; i < sortedPoints->points.size() - 1; ++i) {
+		for (size_t i = 0; i < polyLine->points.size() - 1; ++i) {
 			std::string line_id = "line_" + std::to_string(i);
-			viewer.addLine(sortedPoints->points[i], sortedPoints->points[i + 1], line_id);
+			viewer.addLine(polyLine->points[i], polyLine->points[i + 1], line_id);
 		}
 		// 连接最后一个点到第一个点，形成闭环
-		viewer.addLine(sortedPoints->points.back(), sortedPoints->points.front(), "line_close");
-		viewer.resetCamera();
+		viewer.addLine(polyLine->points.back(), polyLine->points.front(), "line_close");
 
 		// 运行可视化器
 		while (!viewer.wasStopped())
 		{
 			viewer.spinOnce();
 		}
-
-		vCloud.emplace_back(cloud_cluster);
 	}
-
+	
 	return 0;
 }
 
