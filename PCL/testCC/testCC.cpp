@@ -276,6 +276,22 @@ PointCloud::Ptr SortPointsUsingKDTree(const PointCloud::Ptr& cloud)
 	pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
 	kdtree.setInputCloud(cloud);
 
+	// 计算点云密度
+	double dAvgDis = 0.0;
+	int nNum = 0;
+	for (int i = 0; i < cloud->size(); ++i)
+	{
+		std::vector<int> indiceId;
+		std::vector<float> disSquare;
+
+		if (kdtree.nearestKSearch(cloud->points[i], 2, indiceId, disSquare) > 0)
+		{
+			dAvgDis += sqrt(disSquare[1]);
+			nNum++;
+		}
+	}
+	dAvgDis /= nNum;
+
 	// 结果点集
 	PointCloud::Ptr sortedPoints(new PointCloud);
 
@@ -290,7 +306,7 @@ PointCloud::Ptr SortPointsUsingKDTree(const PointCloud::Ptr& cloud)
 
 	for (size_t i = 1; i < cloud->points.size(); ++i) 
 	{
-		float searchRadius = 0.1f;				// 搜索半径，可根据点云密度调整
+		float searchRadius = dAvgDis;						//0.1f：搜索半径，可根据点云密度调整
 		bool foundValidPoint = false;
 
 		while (!foundValidPoint)
@@ -328,7 +344,7 @@ PointCloud::Ptr SortPointsUsingKDTree(const PointCloud::Ptr& cloud)
 				}
 				else
 				{
-					searchRadius *= 2;
+					searchRadius *= 2;		// 动态调整半径
 				}
 			}
 		}
@@ -343,7 +359,8 @@ int main()
 	// ****************************获取数据******************************
 	pcl::PointCloud<pcl::PointXYZ>::Ptr pc(new pcl::PointCloud<pcl::PointXYZ>);
 	pcl::PolygonMesh mesh;
-	std::string fnameS = R"(Test0815-rd.pcd)";   //pmt.pcd | bunny.pcd | Testcase01.pcd | test.stl | Testcase02.pcd
+	std::string fnameS = R"(Test0815.pcd)";   //Test0815-rd.pcd
+	
 	//支持pcd与ply两种格式
 	if (fnameS.substr(fnameS.find_last_of('.') + 1) == "pcd") {
 		pcl::io::loadPCDFile(fnameS, *pc);
@@ -358,6 +375,22 @@ int main()
 	// 创建KD-Tree对象用于搜索
 	pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
 	tree->setInputCloud(pc);
+
+	// 计算点云密度
+	double dAvgDis = 0.0;
+	int nNum = 0;
+	for (int i = 0; i < pc->size(); ++i)
+	{
+		std::vector<int> indiceId;
+		std::vector<float> disSquare;
+
+		if (tree->nearestKSearch(pc->points[i], 2, indiceId, disSquare) > 0)
+		{
+			dAvgDis += sqrt(disSquare[1]);
+			nNum++;
+		}
+	}
+	dAvgDis /= nNum;
 
 	// 欧几里德聚类提取器
 	std::vector<pcl::PointIndices> cluster_indices;
@@ -383,8 +416,13 @@ int main()
 		pcl::visualization::PCLVisualizer viewer("Line Viewer");
 
 		// 遍历点云并顺序连接相邻的点
-		for (size_t i = 0; i < sortedPoints->points.size() - 1; ++i) {
+		for (size_t i = 0; i < sortedPoints->points.size() - 1; ++i) 
+		{
 			std::string line_id = "line_" + std::to_string(i);
+			double dis = pcl::euclideanDistance(sortedPoints->points[i], sortedPoints->points[i + 1]);
+			if ( dis > 10 * dAvgDis)
+				continue;
+
 			viewer.addLine(sortedPoints->points[i], sortedPoints->points[i + 1], line_id);
 		}
 		// 连接最后一个点到第一个点，形成闭环
