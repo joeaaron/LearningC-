@@ -97,6 +97,9 @@ public:
 		return m_dSlicePos;
 	}
 
+	// 设置/获取 旋转
+	void SetSlicePos(TransData transData);
+
 #pragma endregion
 
 #pragma region Related to execution and results
@@ -120,6 +123,7 @@ private:
 	double				  m_dSlicePos;				 // 切片位置
 	double				  m_dInterval;				 // 点间距
 	int					  m_nThreadNum;				 // 线程数
+	TransData			  m_transData;
 };
 
 typedef PCL_Slice::eExtraPcl_Message    em3DCloudSliceMessage;

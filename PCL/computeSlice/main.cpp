@@ -38,11 +38,11 @@ int main(int argc, char** argv)
 {
 	// ‰»ÎSTL∏Ò Ω
 	SliceBuf* buf = new SliceBuf();
-	SLT2Cloud("cad.stl", buf);
+	SLT2Cloud("test1.stl", buf);
 
 	PCL_Slice slice;
 	pcl::PointCloud<pcl::PointXYZ>::Ptr pCloudOut(new pcl::PointCloud<pcl::PointXYZ>);
-	slice.SetSlicePos(-81.001732);
+	slice.SetSlicePos(2.866);
 	slice.Execute(pCloudOut, buf);
 
 	boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer(new pcl::visualization::PCLVisualizer("3D Viewer"));
@@ -51,6 +51,7 @@ int main(int argc, char** argv)
 	viewer->addPointCloud(pCloudOut, "Slice");               
 	viewer->setRepresentationToSurfaceForAllActors();            
 	viewer->initCameraParameters();
+	viewer->resetCamera();
 	viewer->spin();
 
 	return 0;

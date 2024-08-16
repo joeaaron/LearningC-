@@ -42,7 +42,7 @@ int main(int argc, char** argv)
 
 	PCL_Slice slice;
 	pcl::PointCloud<pcl::PointXYZ>::Ptr pCloudOut(new pcl::PointCloud<pcl::PointXYZ>);
-	slice.SetAxisDir(em3DCloudSliceAxisDir::eAxixX);
+	slice.SetAxisDir(em3DCloudSliceAxisDir::eAxixX);  // ÑØXÖá
 	slice.SetSlicePos(-12.64);
 	slice.Execute(pCloudOut, buf);
 

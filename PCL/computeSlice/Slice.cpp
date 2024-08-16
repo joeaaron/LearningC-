@@ -31,62 +31,57 @@ namespace
 		double cosX = cos(transData.rotX * M_PI / 180);
 
 		// 定义旋转矩阵 R1, R2, R3
-		Eigen::Matrix3d R1, R2, R3;
-		R1 << 1, 0, 0,
-			0, cosX, -sinX,
-			0, sinX, cosX;
+		Eigen::Matrix4d R1, R2, R3;
+		R1 << 0, 0, 0, 0,
+			0, 1, 0, 0,
+			0, 0, cosX, -sinX,
+			0, 0, sinX, cosX;
 
-		R2 << cosX, 0, sinX,
-			0, 1, 0,
-			-sinX, 0, cosX;
+		R2 << 0, 0, 0, 0,
+			0, cosX, 0, sinX,
+			0, 0, 1, 0,
+			0, -sinX, 0, cosX;
 
-		R3 << cosX, -sinX, 0,
-			sinX, cosX, 0,
-			0, 0, 1;
+		R3 << 0, 0, 0, 0,
+			0, cosX, -sinX, 0,
+			0, sinX, cosX, 0,
+			0, 0, 0, 1;
 
 		// 计算 R4 = R2 * R1, R5 = R3 * R4
-		Eigen::Matrix3d R4 = R2 * R1;
-		Eigen::Matrix3d R5 = R3 * R4;
+		Eigen::Matrix4d R4 = R2 * R1;
+		Eigen::Matrix4d R5 = R3 * R4;
 
 		// 平移向量
-		Eigen::Vector3d T5(transData.moveX, transData.moveY, transData.moveZ);
+		Eigen::Vector4d T5(0, transData.moveX, transData.moveY, transData.moveZ);
 
 		// 旋转和平移点云
-		for (int kk = 0; kk < lCloudNum; kk++)
+		for (int k = 0; k < lCloudNum; k++)
 		{
 			for (int i = 0; i < 4; i++)
 			{
-				Eigen::Vector3d p;
-				for (int j = 0; j < 3; j++)
+				Eigen::Vector4d p;
+				for (int j = 1; j < 4; j++)
 				{
-					p[j] = pCloud[kk * PNT_STRIDE + i * 3 + j];
+					// 取三角面上3个点
+					p[j] = pCloud[k * PNT_STRIDE + i * 3 + j];
 				}
 
 				// 点云旋转平移后的坐标 p2 = R5 * p1 + T5
-				Eigen::Vector3d transPt = R5 * p;
+				Eigen::Vector4d transPt = R5 * p;
 				if (i > 0)
 				{
 					transPt += T5;
 				}
 
 				for (int j = 0; j < 3; j++) {
-					pCloud[kk * PNT_STRIDE + i * 3 + j] = transPt[j];
+					pCloud[k * PNT_STRIDE + i * 3 + j] = transPt[j];
 				}
 			}
 		}
 
 		// 记录旋转矩阵和平移向量
-		Eigen::Matrix4d mat;
-		mat << 0, 0, 0, 0,
-			0, 1, 0, 0,
-			0, 0, 1, 0,
-			0, 0, 0, 1;
-		transData.mtxR = mat;
-
-		Eigen::Vector4d vec;
-		vec.head<3>() = T5;
-		vec[3] = 0;
-		transData.vecT = vec;
+		transData.mtxR = R5;
+		transData.vecT = T5;
 	}
 
 	/*
@@ -856,10 +851,10 @@ bool PCL_Slice::Execute(pcl::PointCloud<pcl::PointXYZ>::Ptr& pCloudOut, SliceBuf
 	RotateCloud(pBuf);
 
 	// 计算切片
-	ComputeSlcY(pBuf, m_dSlicePos);
+	ComputeSlcZ(pBuf, m_dSlicePos);
 
 	// 旋转切片点云
-	RotateSlcY(pBuf, m_dSlicePos);
+	RotateSlcZ(pBuf, m_dSlicePos);
 
 	// 输出点云
 	pCloudOut = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
