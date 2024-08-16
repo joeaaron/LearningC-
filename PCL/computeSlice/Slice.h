@@ -58,11 +58,20 @@ typedef struct SliceCloudBuf
 
 typedef struct TransformData
 {
-	double rotX, rotY, rotZ;
-	double moveX, moveY, moveZ;
+	double rotX = 0.0, rotY = 0.0, rotZ = 0.0;
+	double moveX = 0.0, moveY = 0.0, moveZ = 0.0;
 
 	Eigen::Matrix4d mtxR;
 	Eigen::Vector4d vecT;
+
+	// 构造函数
+	TransformData(double rX, double rY, double rZ, double mX, double mY, double mZ)
+		: rotX(rX), rotY(rY), rotZ(rZ), moveX(mX), moveY(mY), moveZ(mZ)
+	{
+		// 初始化旋转矩阵和位移向量
+		mtxR = Eigen::Matrix4d::Identity(); // 设置为单位矩阵
+		vecT << moveX, moveY, moveZ, 1.0;
+	}
 }TransData;
 
 /**
@@ -98,7 +107,7 @@ public:
 	}
 
 	// 设置/获取 旋转
-	void SetSlicePos(TransData transData);
+	void SetTransData(TransData transData);
 
 #pragma endregion
 

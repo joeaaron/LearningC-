@@ -7,31 +7,32 @@ using namespace std;
 
 void SLT2Cloud(const char* name, SliceBuf* pbuf)
 {
-	std::ifstream fid(name, std::ios::binary);
-	if (!fid) {
-		std::cerr << "模型文件打开错误" << std::endl;
-		return;
-	}
-
-	float PNT1[20];
-	fid.read(reinterpret_cast<char*>(PNT1), sizeof(float) * 20);
-
-	long int ct;	// 面片数
-	fid.read(reinterpret_cast<char*>(&ct), sizeof(long int));
-
-	// 使用vector动态分配内存
-	pbuf->pCloud.resize(ct * PNT_STRIDE * sizeof(float));
-
 	short int PNT2;
-	for (long int k = 1; k <= ct; ++k) 
-	{
-		for (int j = 1; j <= PNT_STRIDE; j++)
-			fid.read(reinterpret_cast<char*>(pbuf->pCloud.data() + k * PNT_STRIDE + j), sizeof(float));
-		fid.read(reinterpret_cast<char*>(&PNT2), sizeof(short int));
-	}
+	float PNT1[80 + 1];
+	int i, j, k;
+	long int ct;
+	FILE* fid;
 
+	if ((fid = fopen(name, "rb")) == NULL) {
+		printf("模型文件打开错误");   return;
+	}
+	for (i = 1; i <= 20; i++)  PNT1[i] = 0;
+	fread(&PNT1[1], sizeof(float), 20, fid);
+	fread(&ct, sizeof(long int), 1, fid);
+	PNT2 = 0;
+
+	//申请内存
+	//pbuf->pCloud = (float*)malloc(((ct + 1) * 12 + 1) * sizeof(float));
+	pbuf->pCloud.resize(((ct + 1) * 12 + 1) * sizeof(float));
 	pbuf->lCloudNum = ct;
-	fid.close();
+
+	for (k = 1; k <= ct; k++) {
+		for (j = 1; j <= 12; j++)
+			fread(&pbuf->pCloud[k * 12 + j], sizeof(float), 1, fid);
+		fread(&PNT2, sizeof(short int), 1, fid);
+	}
+	//pbuf->pCloud.erase(pbuf->pCloud.begin());
+	fclose(fid);
 }
 
 int main(int argc, char** argv)
@@ -42,7 +43,21 @@ int main(int argc, char** argv)
 
 	PCL_Slice slice;
 	pcl::PointCloud<pcl::PointXYZ>::Ptr pCloudOut(new pcl::PointCloud<pcl::PointXYZ>);
-	slice.SetSlicePos(2.866);
+
+	Eigen::Vector3d anchorPt(0, 1.109, 0.0);
+	//slice.SetSlicePos(9.903);  // Z
+
+	// Y轴切割
+	Eigen::AngleAxisd rotation(M_PI / 2, Eigen::Vector3d::UnitX());
+	Eigen::Matrix3d rotationMatrix = rotation.toRotationMatrix();
+	Eigen::Vector3d eulerAngles = rotationMatrix.eulerAngles(0, 1, 2); // XYZ顺序
+	Eigen::Vector3d rotatedPt = rotationMatrix * anchorPt;
+
+	// 设置变换
+	TransData data(eulerAngles[0], eulerAngles[1], eulerAngles[2], 0, 0, 0);
+	slice.SetTransData(data);
+
+	slice.SetSlicePos(rotatedPt[2]);
 	slice.Execute(pCloudOut, buf);
 
 	boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer(new pcl::visualization::PCLVisualizer("3D Viewer"));
