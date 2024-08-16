@@ -44,7 +44,7 @@ int main(int argc, char** argv)
 	PCL_Slice slice;
 	pcl::PointCloud<pcl::PointXYZ>::Ptr pCloudOut(new pcl::PointCloud<pcl::PointXYZ>);
 
-	Eigen::Vector3d anchorPt(47.882, 0, 0.0);		 // X
+	Eigen::Vector3d anchorPt(-8.891, 0, 0.0);		 // X
 	//Eigen::Vector3d anchorPt(0, 1.109, 0.0);		 // Y
 	//Eigen::Vector3d anchorPt(0, 0, 9.903);		 // Z
 

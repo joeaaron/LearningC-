@@ -47,24 +47,6 @@ namespace
 		double sinZ = sin(transData.rotZ); // * M_PI / 180);	    // 角度转弧度
 		double cosZ = cos(transData.rotZ); // * M_PI / 180);
 
-		//// 定义旋转矩阵 R1, R2, R3
-		//Eigen::Matrix4d R1, R2, R3;
-		//R1 << 0, 0, 0, 0,
-		//	0, 1, 0, 0,
-		//	0, 0, cosX, -sinX,
-		//	0, 0, sinX, cosX;
-
-		//R2 << 0, 0, 0, 0,
-		//	0, cosX, 0, sinX,
-		//	0, 0, 1, 0,
-		//	0, -sinX, 0, cosX;
-
-		//R3 << 0, 0, 0, 0,
-		//	0, cosX, -sinX, 0,
-		//	0, sinX, cosX, 0,
-		//	0, 0, 0, 1;
-
-
 		// 绕X轴的旋转矩阵
 		Eigen::Matrix4d R1, R2, R3;
 		R1 << 1, 0, 0, 0,
@@ -802,9 +784,9 @@ namespace
 		{
 			for (int j = 0; j < ROT_MATRIX_SIZE; j++)
 			{
-				R(i, j) = transData.mtxR(i + 1, j + 1);
+				R(i, j) = transData.mtxR(i, j);
 			}
-			T(i) = transData.vecT(i + 1);
+			T(i) = transData.vecT(i);
 		}
 
 		// 辅助函数，对给定的点进行旋转和平移
