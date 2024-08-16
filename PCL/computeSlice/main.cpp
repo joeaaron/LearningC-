@@ -44,14 +44,26 @@ int main(int argc, char** argv)
 	PCL_Slice slice;
 	pcl::PointCloud<pcl::PointXYZ>::Ptr pCloudOut(new pcl::PointCloud<pcl::PointXYZ>);
 
-	Eigen::Vector3d anchorPt(0, 1.109, 0.0);
-	//slice.SetSlicePos(9.903);  // Z
+	Eigen::Vector3d anchorPt(47.882, 0, 0.0);		 // X
+	//Eigen::Vector3d anchorPt(0, 1.109, 0.0);		 // Y
+	//Eigen::Vector3d anchorPt(0, 0, 9.903);		 // Z
+
+	// X÷·«–∏Ó
+	Eigen::AngleAxisd rotation(-M_PI / 2, Eigen::Vector3d::UnitY());
+	Eigen::Matrix3d rotationMatrix = rotation.toRotationMatrix();
+	Eigen::Vector3d eulerAngles = rotationMatrix.eulerAngles(0, 1, 2);		// XYZÀ≥–Ú
+	Eigen::Vector3d rotatedPt = rotationMatrix * anchorPt;
 
 	// Y÷·«–∏Ó
-	Eigen::AngleAxisd rotation(M_PI / 2, Eigen::Vector3d::UnitX());
-	Eigen::Matrix3d rotationMatrix = rotation.toRotationMatrix();
-	Eigen::Vector3d eulerAngles = rotationMatrix.eulerAngles(0, 1, 2); // XYZÀ≥–Ú
-	Eigen::Vector3d rotatedPt = rotationMatrix * anchorPt;
+	//Eigen::AngleAxisd rotation(M_PI / 2, Eigen::Vector3d::UnitX());
+	//Eigen::Matrix3d rotationMatrix = rotation.toRotationMatrix();
+	//Eigen::Vector3d eulerAngles = rotationMatrix.eulerAngles(0, 1, 2);		// XYZÀ≥–Ú
+	//Eigen::Vector3d rotatedPt = rotationMatrix * anchorPt;
+	
+	// Z÷·«–∏Ó
+	//Eigen::Matrix3d rotationMatrix = Eigen::Matrix3d::Identity();
+	//Eigen::Vector3d eulerAngles = rotationMatrix.eulerAngles(0, 1, 2);		// XYZÀ≥–Ú
+	//Eigen::Vector3d rotatedPt = rotationMatrix * anchorPt;
 
 	// …Ë÷√±‰ªª
 	TransData data(eulerAngles[0], eulerAngles[1], eulerAngles[2], 0, 0, 0);

@@ -914,7 +914,7 @@ bool PCL_Slice::Execute(pcl::PointCloud<pcl::PointXYZ>::Ptr& pCloudOut, SliceBuf
 	}
 
 	// Ðý×ªµãÔÆ
-	RotateCloud(pBuf, m_transData);
+ 	RotateCloud(pBuf, m_transData);
 
 	// ¼ÆËãÇÐÆ¬
 	ComputeSlcZ(pBuf, m_dSlicePos);
