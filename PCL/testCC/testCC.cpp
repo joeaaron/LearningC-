@@ -13,6 +13,7 @@
 #include <pcl/io/vtk_lib_io.h>
 #include <pcl/segmentation/extract_clusters.h>
 #include <pcl/filters/project_inliers.h>
+#include <chrono>
 
 using PointCloud = pcl::PointCloud<pcl::PointXYZ>;
 
@@ -292,9 +293,10 @@ PointCloud::Ptr SortPointsUsingKDTree(const PointCloud::Ptr& cloud)
 	}
 	dAvgDis /= nNum;
 
+
 	// 结果点集
 	PointCloud::Ptr sortedPoints(new PointCloud);
-
+	
 	// 选择起始点，例如选择最左下角的点
 	pcl::PointXYZ startPoint = cloud->points[0];  // 假设选择第一个点作为起始点
 	sortedPoints->points.push_back(startPoint);
@@ -359,8 +361,8 @@ int main()
 	// ****************************获取数据******************************
 	pcl::PointCloud<pcl::PointXYZ>::Ptr pc(new pcl::PointCloud<pcl::PointXYZ>);
 	pcl::PolygonMesh mesh;
-	std::string fnameS = R"(Test0815.pcd)";   //Test0815-rd.pcd
-	
+	std::string fnameS = R"(Test0819.pcd)";   //Test0815-rd.pcd
+
 	//支持pcd与ply两种格式
 	if (fnameS.substr(fnameS.find_last_of('.') + 1) == "pcd") {
 		pcl::io::loadPCDFile(fnameS, *pc);
@@ -371,6 +373,8 @@ int main()
 	else if (fnameS.substr(fnameS.find_last_of('.') + 1) == "stl") {
 		pcl::io::loadPolygonFileSTL(fnameS, mesh);
 	}
+
+	cout << "Points num = " << pc->points.size() << std::endl;
 
 	// 创建KD-Tree对象用于搜索
 	pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
@@ -410,7 +414,11 @@ int main()
 			cloud_cluster->points.push_back(pc->points[index]);
 
 		// 进行点排序
+		auto startOp = std::chrono::high_resolution_clock::now();
 		PointCloud::Ptr sortedPoints = SortPointsUsingKDTree(cloud_cluster);
+		auto endOp = std::chrono::high_resolution_clock::now();
+		std::chrono::duration<double> elapsedOp = endOp - startOp;
+		std::cout << "区域生长点排序算法用时: " << elapsedOp.count() << " seconds" << std::endl;
 
 		// 创建可视化器
 		pcl::visualization::PCLVisualizer viewer("Line Viewer");
@@ -426,7 +434,7 @@ int main()
 			viewer.addLine(sortedPoints->points[i], sortedPoints->points[i + 1], line_id);
 		}
 		// 连接最后一个点到第一个点，形成闭环
-		viewer.addLine(sortedPoints->points.back(), sortedPoints->points.front(), "line_close");
+		//viewer.addLine(sortedPoints->points.back(), sortedPoints->points.front(), "line_close");
 		viewer.resetCamera();
 
 		// 运行可视化器

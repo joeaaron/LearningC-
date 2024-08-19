@@ -51,7 +51,8 @@ int main(int argc, char** argv)
 	//Eigen::Vector3d anchorPt(-18.605, 7.795, 9.999);		 // Any--锚定位置  n(1, 6, 1);
 	//Eigen::Vector3d anchorPt(72.308, 20.916, 9.999);		 // Any--锚定位置  n(3, 6, 1);
 	//Eigen::Vector3d anchorPt(15.950, -0.744, 10.000);		 // Any--锚定位置  n(1, 2, 3);
-	Eigen::Vector3d anchorPt(15.608, -3.041, 4.564);		 // Any--锚定位置  n(1, 1, 1);
+	//Eigen::Vector3d anchorPt(70.381, -46.068, 0.000);		 // Any--锚定位置  n(1, 1, 1);
+	Eigen::Vector3d anchorPt(17.375, 0.056, 8.992);		 // Any--锚定位置  n(0.267, 0.535, 0.802);
 	// X轴切割
 	//Eigen::AngleAxisd rotation(-M_PI / 2, Eigen::Vector3d::UnitY());
 	//Eigen::Matrix3d rotationMatrix = rotation.toRotationMatrix();
@@ -70,7 +71,7 @@ int main(int argc, char** argv)
 	//Eigen::Vector3d rotatedPt = rotationMatrix * anchorPt;
 
 	// 任意平面
-	Eigen::Vector3d n(1, 1, 1);
+	Eigen::Vector3d n(0.267, 0.535, 0.802);
 	Eigen::Vector3d z(0, 0, 1);
 
 	Eigen::Vector3d axis = n.cross(z);
