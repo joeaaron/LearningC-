@@ -36,14 +36,14 @@ namespace
 		auto& pCloud = pBuf->pCloud;
 
 		// 摆放旋转平移
-		double sinX = sin(transData.rotX);  // * M_PI / 180);		// 角度转弧度
-		double cosX = cos(transData.rotX);  // * M_PI / 180);
+		double sinX = sin(transData.m_rot[0]);  	// 角度转弧度
+		double cosX = cos(transData.m_rot[0]);
 
-		double sinY = sin(transData.rotY);  // * M_PI / 180);		// 角度转弧度
-		double cosY = cos(transData.rotY);  // * M_PI / 180);
+		double sinY = sin(transData.m_rot[1]);  	// 角度转弧度
+		double cosY = cos(transData.m_rot[1]);
 
-		double sinZ = sin(transData.rotZ); // * M_PI / 180);	    // 角度转弧度
-		double cosZ = cos(transData.rotZ); // * M_PI / 180);
+		double sinZ = sin(transData.m_rot[2]);		// 角度转弧度
+		double cosZ = cos(transData.m_rot[2]);
 
 		// 绕X轴的旋转矩阵
 		Eigen::Matrix4d R1, R2, R3;
@@ -69,7 +69,7 @@ namespace
 		Eigen::Matrix4d R5 = R3 * R4;
 	
 		// 平移向量
-		Eigen::Vector4d T5(0, transData.moveX, transData.moveY, transData.moveZ);
+		Eigen::Vector4d T5(0, transData.m_move[0], transData.m_move[1], transData.m_move[2]);
 
 		// 旋转和平移点云
 		for (int k = 1; k < lCloudNum; k++)
@@ -127,8 +127,8 @@ namespace
 		//viewer->spin();
 
 		// 记录旋转矩阵和平移向量
-		transData.mtxR = R5;
-		transData.vecT = T5;
+		transData.m_mtxR = R5;
+		transData.m_vecT = T5;
 	}
 
 
@@ -144,13 +144,13 @@ namespace
 	 */
 	void CalLineSeg(LineSeg& lineSegOut, const LineSeg& lineSeg1, const LineSeg& lineSeg2, double dSlicePos)
 	{
-		double dCoef1 = dSlicePos - lineSeg1.z;
-		double dCoef2 = lineSeg2.z - lineSeg1.z;
+		double dCoef1 = dSlicePos - lineSeg1.m_point.z();
+		double dCoef2 = lineSeg2.m_point.z() - lineSeg1.m_point.z();
 
 		if (fabs(dCoef2) < DBL_EPSILON) return;
 
-		lineSegOut.x = dCoef1 * (lineSeg2.x - lineSeg1.x) / dCoef2 + lineSeg1.x;
-		lineSegOut.y = dCoef1 * (lineSeg2.y - lineSeg1.y) / dCoef2 + lineSeg1.y;
+		lineSegOut.m_point.x() = dCoef1 * (lineSeg2.m_point.x() - lineSeg1.m_point.x()) / dCoef2 + lineSeg1.m_point.x();
+		lineSegOut.m_point.y() = dCoef1 * (lineSeg2.m_point.y() - lineSeg1.m_point.y()) / dCoef2 + lineSeg1.m_point.y();
 		//lineSegOut.r = dCoef1 * (lineSeg2.r - lineSeg1.r) / dCoef2 + lineSeg1.r;
 		//lineSegOut.g = dCoef1 * (lineSeg2.g - lineSeg1.g) / dCoef2 + lineSeg1.g;
 		//lineSegOut.b = dCoef1 * (lineSeg2.b - lineSeg1.b) / dCoef2 + lineSeg1.b;
@@ -167,8 +167,8 @@ namespace
 	bool IsSegmentEqual(const LineSegment& lineSeg1, const LineSegment& lineSeg2,
 		const LineSegment& slcLineSeg0, const LineSegment& slcLineSeg1)
 	{
-		return (lineSeg1.x == slcLineSeg0.x && lineSeg2.x == slcLineSeg1.x && lineSeg1.y == slcLineSeg0.y && lineSeg2.y == slcLineSeg1.y)
-			|| (lineSeg2.x == slcLineSeg0.x && lineSeg1.x == slcLineSeg1.x && lineSeg2.y == slcLineSeg0.y && lineSeg1.y == slcLineSeg1.y);
+		return (lineSeg1.m_point.x() == slcLineSeg0.m_point.x() && lineSeg2.m_point.x() == slcLineSeg1.m_point.x() && lineSeg1.m_point.y() == slcLineSeg0.m_point.y() && lineSeg2.m_point.y() == slcLineSeg1.m_point.y())
+			|| (lineSeg2.m_point.x() == slcLineSeg0.m_point.x() && lineSeg1.m_point.x() == slcLineSeg1.m_point.x() && lineSeg2.m_point.y() == slcLineSeg0.m_point.y() && lineSeg1.m_point.y() == slcLineSeg1.m_point.y());
 	}
 
 	/*
@@ -199,21 +199,21 @@ namespace
 			double yn = pCloud[k * PNT_STRIDE + 2];
 			double zn = pCloud[k * PNT_STRIDE + 3];
 
-			lineSeg1.x = pCloud[k * PNT_STRIDE + 4]; lineSeg1.y = pCloud[k * PNT_STRIDE + 5]; lineSeg1.z = pCloud[k * PNT_STRIDE + 6];
-			lineSeg2.x = pCloud[k * PNT_STRIDE + 7]; lineSeg2.y = pCloud[k * PNT_STRIDE + 8]; lineSeg2.z = pCloud[k * PNT_STRIDE + 9];
-			lineSeg3.x = pCloud[k * PNT_STRIDE + 10]; lineSeg3.y = pCloud[k * PNT_STRIDE + 11]; lineSeg3.z = pCloud[k * PNT_STRIDE + PNT_STRIDE];
+			lineSeg1.m_point.x() = pCloud[k * PNT_STRIDE + 4]; lineSeg1.m_point.y()= pCloud[k * PNT_STRIDE + 5]; lineSeg1.m_point.z() = pCloud[k * PNT_STRIDE + 6];
+			lineSeg2.m_point.x() = pCloud[k * PNT_STRIDE + 7]; lineSeg2.m_point.y()= pCloud[k * PNT_STRIDE + 8]; lineSeg2.m_point.z() = pCloud[k * PNT_STRIDE + 9];
+			lineSeg3.m_point.x() = pCloud[k * PNT_STRIDE + 10]; lineSeg3.m_point.y() = pCloud[k * PNT_STRIDE + 11]; lineSeg3.m_point.z() = pCloud[k * PNT_STRIDE + PNT_STRIDE];
 
 			//查找位置相临近的点坐标
-			if (lineSeg1.z == dSlicePos && lineSeg2.z == dSlicePos && lineSeg3.z == dSlicePos) { continue; }
+			if (lineSeg1.m_point.z() == dSlicePos && lineSeg2.m_point.z() == dSlicePos && lineSeg3.m_point.z() == dSlicePos) { continue; }
 			bool flagRelated = false;
 			int dt = 0;
 
 			// 如果三个相邻点都在dSlicePos平面的同侧（即都大于或都小于dSlicePos），则进一步检查是否有一个或两个点在dSlicePos平面上。
 			// 如果是，则将这些线段存储在pBuf->slc中。
-			if ((lineSeg1.z >= dSlicePos && lineSeg2.z >= dSlicePos && lineSeg3.z >= dSlicePos)
-				|| (lineSeg1.z <= dSlicePos && lineSeg2.z <= dSlicePos && lineSeg3.z <= dSlicePos))
+			if ((lineSeg1.m_point.z() >= dSlicePos && lineSeg2.m_point.z() >= dSlicePos && lineSeg3.m_point.z() >= dSlicePos)
+				|| (lineSeg1.m_point.z() <= dSlicePos && lineSeg2.m_point.z() <= dSlicePos && lineSeg3.m_point.z() <= dSlicePos))
 			{
-				if (lineSeg1.z == dSlicePos && lineSeg2.z == dSlicePos && lineSeg3.z > dSlicePos)
+				if (lineSeg1.m_point.z() == dSlicePos && lineSeg2.m_point.z() == dSlicePos && lineSeg3.m_point.z() > dSlicePos)
 				{
 					nCnt++;  dt = 0;   flagRelated = true;
 					pBuf->slc[nCnt].lineSeg0 = lineSeg1;
@@ -222,7 +222,7 @@ namespace
 					dt++;
 
 				}
-				if (lineSeg1.z == dSlicePos && lineSeg3.z == dSlicePos && lineSeg2.z > dSlicePos)
+				if (lineSeg1.m_point.z() == dSlicePos && lineSeg3.m_point.z() == dSlicePos && lineSeg2.m_point.z() > dSlicePos)
 				{
 					nCnt++;  dt = 0;   flagRelated = true;
 					pBuf->slc[nCnt].lineSeg0 = lineSeg1;
@@ -230,7 +230,7 @@ namespace
 					pBuf->slc[nCnt].lineSeg1 = lineSeg3;
 					dt++;
 				}
-				if (lineSeg3.z == dSlicePos && lineSeg2.z == dSlicePos && lineSeg1.z > dSlicePos)
+				if (lineSeg3.m_point.z() == dSlicePos && lineSeg2.m_point.z() == dSlicePos && lineSeg1.m_point.z() > dSlicePos)
 				{
 					nCnt++;  dt = 0;   flagRelated = true;
 					pBuf->slc[nCnt].lineSeg0 = lineSeg3;
@@ -247,7 +247,7 @@ namespace
 				nCnt++;  dt = 0;   flagRelated = true;
 				LineSegment lineSegOut;
 
-				if ((lineSeg1.z - dSlicePos) * (lineSeg2.z - dSlicePos) < 0)
+				if ((lineSeg1.m_point.z() - dSlicePos) * (lineSeg2.m_point.z() - dSlicePos) < 0)
 				{
 					CalLineSeg(lineSegOut, lineSeg1, lineSeg2, dSlicePos);
 
@@ -256,7 +256,7 @@ namespace
 
 					dt++;
 				}
-				if ((lineSeg1.z - dSlicePos) * (lineSeg3.z - dSlicePos) < 0)
+				if ((lineSeg1.m_point.z() - dSlicePos) * (lineSeg3.m_point.z() - dSlicePos) < 0)
 				{
 					CalLineSeg(lineSegOut, lineSeg1, lineSeg3, dSlicePos);
 
@@ -265,7 +265,7 @@ namespace
 
 					dt++;
 				}
-				if ((lineSeg3.z - dSlicePos) * (lineSeg2.z - dSlicePos) < 0)
+				if ((lineSeg3.m_point.z() - dSlicePos) * (lineSeg2.m_point.z() - dSlicePos) < 0)
 				{
 					CalLineSeg(lineSegOut, lineSeg3, lineSeg2, dSlicePos);
 
@@ -274,21 +274,21 @@ namespace
 
 					dt++;
 				}
-				if (lineSeg1.z == dSlicePos && (lineSeg3.z - dSlicePos) * (lineSeg2.z - dSlicePos) < 0)
+				if (lineSeg1.m_point.z() == dSlicePos && (lineSeg3.m_point.z() - dSlicePos) * (lineSeg2.m_point.z() - dSlicePos) < 0)
 				{
 					if (dt == 0) { pBuf->slc[nCnt].lineSeg0 = lineSeg1; }
 					if (dt == 1) { pBuf->slc[nCnt].lineSeg1 = lineSeg1; }
 
 					dt++;
 				}
-				if (lineSeg2.z == dSlicePos && (lineSeg1.z - dSlicePos) * (lineSeg3.z - dSlicePos) < 0)
+				if (lineSeg2.m_point.z() == dSlicePos && (lineSeg1.m_point.z() - dSlicePos) * (lineSeg3.m_point.z() - dSlicePos) < 0)
 				{
 					if (dt == 0) { pBuf->slc[nCnt].lineSeg0 = lineSeg2; }
 					if (dt == 1) { pBuf->slc[nCnt].lineSeg1 = lineSeg2; }
 
 					dt++;
 				}
-				if (lineSeg3.z == dSlicePos && (lineSeg1.z - dSlicePos) * (lineSeg2.z - dSlicePos) < 0)
+				if (lineSeg3.m_point.z() == dSlicePos && (lineSeg1.m_point.z() - dSlicePos) * (lineSeg2.m_point.z() - dSlicePos) < 0)
 				{
 					if (dt == 0) { pBuf->slc[nCnt].lineSeg0 = lineSeg3; }
 					if (dt == 1) { pBuf->slc[nCnt].lineSeg1 = lineSeg3; }
@@ -304,10 +304,10 @@ namespace
 			{
 				lineSeg1 = pBuf->slc[nCnt].lineSeg0;
 				lineSeg2 = pBuf->slc[nCnt].lineSeg1;
-				lineSeg3.x = lineSeg2.x - lineSeg1.x;
-				lineSeg3.y = lineSeg2.y - lineSeg1.y;
+				lineSeg3.m_point.x() = lineSeg2.m_point.x() - lineSeg1.m_point.x();
+				lineSeg3.m_point.y() = lineSeg2.m_point.y() - lineSeg1.m_point.y();
 
-				if (xn * lineSeg3.y - yn * lineSeg3.x < 0)
+				if (xn * lineSeg3.m_point.y() - yn * lineSeg3.m_point.x() < 0)
 				{
 					pBuf->slc[nCnt].nLineB = -1;
 				}
@@ -376,9 +376,9 @@ namespace
 		{
 			for (int j = 0; j < ROT_MATRIX_SIZE; j++)
 			{
-				R(i, j) = transData.mtxR(i, j);
+				R(i, j) = transData.m_mtxR(i, j);
 			}
-			T(i) = transData.vecT(i);
+			T(i) = transData.m_vecT(i);
 		}
 
 		Eigen::Matrix3d R_inv = R.transpose();
@@ -393,8 +393,8 @@ namespace
 		// 对切片端点0和1进行旋转和平移
 		for (int k = 0; k < pbuf->nCnt; k++)
 		{
-			rotateAndTranslate(pbuf->slc[k].lineSeg0.x, pbuf->slc[k].lineSeg0.y, pbuf->slc[k].vec0);
-			rotateAndTranslate(pbuf->slc[k].lineSeg1.x, pbuf->slc[k].lineSeg1.y, pbuf->slc[k].vec1);
+			rotateAndTranslate(pbuf->slc[k].lineSeg0.m_point.x(), pbuf->slc[k].lineSeg0.m_point.y(), pbuf->slc[k].vec0);
+			rotateAndTranslate(pbuf->slc[k].lineSeg1.m_point.x(), pbuf->slc[k].lineSeg1.m_point.y(), pbuf->slc[k].vec1);
 		}
 	}
 
@@ -404,7 +404,7 @@ PCL_Slice::PCL_Slice()
 	: m_eMessage(eExtraPcl_Message::eMessageOK)
 	, m_dSlicePos(6.0)
 	, m_dInterval(0.03)
-	, m_transData(0, 0, 0, 0, 0, 0)
+	, m_transData(Eigen::Vector3d(0, 0, 0), Eigen::Vector3d(0, 0, 0))
 {
 	m_nThreadNum = static_cast<int>(omp_get_num_procs() * 0.75);
 }

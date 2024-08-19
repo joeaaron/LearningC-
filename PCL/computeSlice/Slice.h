@@ -11,31 +11,23 @@ const int PCL_SLICE_POINT_NUM = 60000;
 typedef struct LineSegment
 {
 	LineSegment() {}
-	LineSegment(double dx, double dy, double dz, double dr, double dg, double db)
+	LineSegment(Eigen::Vector3d point, Eigen::Vector3d color)
 	{
-		x = dx;
-		y = dy;
-		z = dz;
-		r = dr;
-		g = dg;
-		b = db;
+		m_point = point;
+		m_color = color;
 	}
 
 	LineSegment& operator=(const LineSegment& rhs)
 	{
 		if (this == &rhs) return *this;
-		x = rhs.x;
-		y = rhs.y;
-		z = rhs.z;
-		r = rhs.r;
-		g = rhs.g;
-		b = rhs.b;
+		m_point = rhs.m_point;
+		m_color = rhs.m_color;
 
 		return *this;
 	}
 
-	double x = 0, y = 0, z = 0;					// 线段端点的坐标
-	double r = 0, g = 0, b = 0;					// 线段端点的颜色
+	Eigen::Vector3d m_point;					// 线段端点的坐标
+	Eigen::Vector3d m_color;					// 线段端点的颜色
 }LineSeg;
 
 typedef struct SliceCloudBuf
@@ -58,20 +50,20 @@ typedef struct SliceCloudBuf
 
 typedef struct TransformData
 {
-	double rotX = 0.0, rotY = 0.0, rotZ = 0.0;
-	double moveX = 0.0, moveY = 0.0, moveZ = 0.0;
-
-	Eigen::Matrix4d mtxR;
-	Eigen::Vector4d vecT;
-
-	// 构造函数
-	TransformData(double rX, double rY, double rZ, double mX, double mY, double mZ)
-		: rotX(rX), rotY(rY), rotZ(rZ), moveX(mX), moveY(mY), moveZ(mZ)
+	TransformData(Eigen::Vector3d rot, Eigen::Vector3d move)
+		: m_rot(rot)
+		, m_move(move)
 	{
 		// 初始化旋转矩阵和位移向量
-		mtxR = Eigen::Matrix4d::Identity(); // 设置为单位矩阵
-		vecT << moveX, moveY, moveZ, 1.0;
+		m_mtxR = Eigen::Matrix4d::Identity(); // 设置为单位矩阵
+		m_vecT.head<3>() = m_move;
 	}
+
+	Eigen::Vector3d m_rot;
+	Eigen::Vector3d m_move;
+
+	Eigen::Matrix4d m_mtxR;
+	Eigen::Vector4d m_vecT;
 }TransData;
 
 /**

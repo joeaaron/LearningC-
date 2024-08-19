@@ -79,11 +79,13 @@ int main(int argc, char** argv)
 
 	Eigen::AngleAxisd rotation(angle, axis.normalized());
 	Eigen::Matrix3d rotationMatrix = rotation.toRotationMatrix();
+	
+	// 共同部分
 	Eigen::Vector3d eulerAngles = rotationMatrix.eulerAngles(0, 1, 2);		// XYZ顺序
 	Eigen::Vector3d rotatedPt = rotationMatrix * anchorPt;
 
 	// 设置变换
-	TransData data(eulerAngles[0], eulerAngles[1], eulerAngles[2], 0, 0, 0);
+	TransData data(eulerAngles, Eigen::Vector3d(0, 0, 0));
 	slice.SetTransData(data);
 
 	slice.SetSlicePos(rotatedPt[2]);
