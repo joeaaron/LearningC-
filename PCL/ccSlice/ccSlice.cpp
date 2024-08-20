@@ -32,7 +32,7 @@ using Vertex2D = CCCoreLib::PointProjectionTools::IndexedCCVector2;
 using Hull2D = std::list<Vertex2D*>;
 using VertexIterator = std::list<Vertex2D*>::iterator;
 
-#define ENABLE_DISPLAY 0					// 定义一个宏，用于控制显示状态
+#define ENABLE_DISPLAY 1					// 定义一个宏，用于控制显示状态
 
 //list of already used point to avoid hull's inner loops
 enum HullPointFlags {
@@ -604,8 +604,8 @@ CCPolyline* ExtractFlatEnvelope(PointCloud* points,
 
 	if (preferredNormDim != nullptr)
 	{
-		//const CCVector3* G = points->getPoint(0); //any point through which the plane passes is ok
-		const CCVector3* G = new CCVector3(1.947, 3.896, -6.655);
+		const CCVector3* G = points->getPoint(0); //any point through which the plane passes is ok
+		//const CCVector3* G = new CCVector3(1.947, 3.896, -6.655);
 		preferredPlaneEq[0] = preferredNormDim[0];
 		preferredPlaneEq[1] = preferredNormDim[1];
 		preferredPlaneEq[2] = preferredNormDim[2];
@@ -650,7 +650,7 @@ CCPolyline* ExtractFlatEnvelope(PointCloud* points,
 	Hull2D hullPoints;
 	if (!ExtractConcaveHull2D(points2D,
 		hullPoints,
-		maxEdgeLength * maxEdgeLength, 0))
+		maxEdgeLength*maxEdgeLength, 0))
 	{
 		return nullptr;
 	}
@@ -696,11 +696,11 @@ CCPolyline* ExtractFlatEnvelope(PointCloud* points,
 	cloud->height = 1;
 
 	// 保存切片点云
-	pcl::PCDWriter writer;
-	writer.write<pcl::PointXYZ>("ResCloud.pcd", *cloud);
+	//pcl::PCDWriter writer;
+	//writer.write<pcl::PointXYZ>("ResCloud.pcd", *cloud);
 
-	pcl::PointXYZ min_pt, max_pt;
-	pcl::getMinMax3D(*cloud, min_pt, max_pt);
+	/*pcl::PointXYZ min_pt, max_pt;
+	pcl::getMinMax3D(*cloud, min_pt, max_pt);*/
 
 	// 计算包围盒的中心点
 	//pcl::PointXYZ center;
@@ -826,9 +826,9 @@ inline Eigen::Vector4d CalcPlane(Eigen::Vector3d center, Eigen::Vector3d normal)
 	return planeEquation;
 }
 
-void GetSlice(pcl::PointCloud<pcl::PointXYZ>::Ptr& sliceCloud, const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud, const Eigen::Vector4d& n)
+void GetSlice(pcl::PointCloud<pcl::PointXYZ>::Ptr& sliceCloud, const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud, const Eigen::Vector4d& n, double delta)
 {
-	double delta = 2;			// 设置切片的0.5倍厚度,厚度和点云密度相关
+	//double delta = 0.2;			// 设置切片的0.5倍厚度,厚度和点云密度相关
 	std::vector<int> pointIdx;
 
 	for (int i = 0; i < cloud->size(); ++i)
@@ -919,6 +919,34 @@ bool Mesh2CloudPCL(pcl::PointCloud<pcl::PointXYZ>& cloudOut,
 	return true;
 }
 
+pcl::PointCloud<pcl::PointXYZ>::Ptr TransformCloud(const pcl::PointCloud<pcl::PointXYZ>::Ptr cloudIn, Eigen::Matrix4d transformT)
+{
+	pcl::PointCloud<pcl::PointXYZ>::Ptr cloudout(new pcl::PointCloud<pcl::PointXYZ>);
+	cloudout->width = cloudIn->width;
+	cloudout->height = cloudIn->height;
+	cloudout->is_dense = cloudIn->is_dense;
+	cloudout->points.resize(cloudIn->points.size());
+
+	// 启用OpenMP并行化
+#pragma omp parallel for 
+	// 遍历原始点云中的每个点  
+	for (int i = 0; i < cloudIn->points.size(); ++i)
+	{
+		// 创建一个4x1的齐次坐标向量（x, y, z, 1）  
+		Eigen::Vector4d point_homogeneous(cloudIn->points[i].x, cloudIn->points[i].y, cloudIn->points[i].z, 1.0);
+
+		// 应用变换矩阵到齐次坐标向量  
+		Eigen::Vector4d transformed_point_homogeneous = transformT * point_homogeneous;
+
+		// 提取变换后的3D坐标（x, y, z）  
+		cloudout->points[i].x = transformed_point_homogeneous(0);
+		cloudout->points[i].y = transformed_point_homogeneous(1);
+		cloudout->points[i].z = transformed_point_homogeneous(2);
+	}
+
+	return cloudout;
+}
+
 int main() 
 {
 	// ****************************获取数据******************************
@@ -936,22 +964,65 @@ int main()
 		pcl::io::loadPolygonFileSTL(fnameS, mesh);
 	}
 
+	// 创建KD-Tree对象用于搜索
+	pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
+	tree->setInputCloud(pc);
+
+	// 计算点云密度
+	double dAvgDis = 0.0;
+	int nNum = 0;
+	for (int i = 0; i < pc->size(); ++i)
+	{
+		std::vector<int> indiceId;
+		std::vector<float> disSquare;
+
+		if (tree->nearestKSearch(pc->points[i], 2, indiceId, disSquare) > 0)
+		{
+			dAvgDis += sqrt(disSquare[1]);
+			nNum++;
+		}
+	}
+	dAvgDis /= nNum;
+
 	// ****************************获取包围盒内的点云******************************
 	// TEST CASE 01
 	Eigen::Vector3d center(-17.670, -26.448, -14.998);
-	Eigen::Vector3d normal(0.577, 0.577, 0.577);
+	Eigen::Vector3d n(0.577, 0.577, 0.577);
 
 	// TEST CASE 02
 	/*Eigen::Vector3d center(1.947, 3.896, -6.655);
-	Eigen::Vector3d normal(0.267, 0.535, 0.802);*/
+	Eigen::Vector3d n(0.267, 0.535, 0.802);*/
 
-	Eigen::Vector4d plane = CalcPlane(center, normal);
+	// 任意平面
+	//Eigen::Vector3d center(4.734, 9.470, 1.706);
+	//Eigen::Vector3d n(0.267, 0.535, 0.802);
+	Eigen::Vector3d z(0, 0, 1);
 
+	Eigen::Vector3d axis = n.cross(z);
+	double angle = acos(n.dot(z) / n.norm());
+
+	Eigen::AngleAxisd rotation(angle, axis.normalized());
+	Eigen::Matrix3d rotationMatrix = rotation.toRotationMatrix();
+
+	// 使用旋转矩阵旋转点云
+	Eigen::Matrix4d transMtx = Eigen::Matrix4d::Identity();
+	transMtx.block<3, 3>(0, 0) = rotationMatrix;
+
+	pcl::PointCloud<pcl::PointXYZ>::Ptr rotatedCloud(new pcl::PointCloud<pcl::PointXYZ>);
+	rotatedCloud = TransformCloud(pc, transMtx);
+	Eigen::Vector3d rotatedPt = rotationMatrix * center;
+
+	// 得到包围盒内点云
+	Eigen::Vector4d plane = CalcPlane(rotatedPt, z);
 	pcl::PointCloud<pcl::PointXYZ>::Ptr sliceCloud(new pcl::PointCloud<pcl::PointXYZ>);
-	GetSlice(sliceCloud, pc, plane);
+	GetSlice(sliceCloud, rotatedCloud, plane, dAvgDis*0.5);
 
+	pcl::PLYWriter writer;
+	writer.write("slice0820.ply", *sliceCloud, false);
+	std::cout << "保存成功！" << std::endl;
+// 
 	// 根据包围盒对角线距离设置maxEdgeLength
-	PointCoordinateType maxEdgeLength = CalcBoxDis(sliceCloud) / 100.0;   //2.655282;
+	PointCoordinateType maxEdgeLength = CalcBoxDis(sliceCloud) / 100.0;   
 
 	// ****************************转换数据******************************
 	CCCoreLib::PointCloudTpl<PointCloud> ccCloud;
@@ -969,17 +1040,22 @@ int main()
 	PointCoordinateType* preferredUpDir = nullptr;
 
 	// TEST CASE 01
-	preferredNormDir = new PointCoordinateType[3]{ 0.577, 0.577, 0.577 };
-	preferredUpDir = new PointCoordinateType[3]{ -0.408, -0.408, 0.816 };
+	/*preferredNormDir = new PointCoordinateType[3]{ 0.577, 0.577, 0.577 };
+	preferredUpDir = new PointCoordinateType[3]{ -0.408, -0.408, 0.816 };*/
 
 	// TEST CASE 02
 	/*preferredNormDir = new PointCoordinateType[3]{ 0.267, 0.535, 0.802 };
 	preferredUpDir = new PointCoordinateType[3]{ -0.359, -0.717, 0.598 };*/
+
+	preferredNormDir = new PointCoordinateType[3]{ 0.0, 0.0, 1.0 };
+	preferredUpDir = new PointCoordinateType[3]{ 0.0, -1.0, 0.0 };
+
 	auto startOp = std::chrono::high_resolution_clock::now();
 	CCPolyline* polyLine = ExtractFlatEnvelope(points, maxEdgeLength, preferredNormDir, preferredUpDir);
 	auto endOp = std::chrono::high_resolution_clock::now();
 	std::chrono::duration<double> elapsedOp = endOp - startOp;
 	std::cout << "点云切片算法用时: " << elapsedOp.count() << " seconds" << std::endl;
+	
 	// ****************************保存数据******************************
 	//pcl::PLYWriter writer;
 	//writer.write("result.ply", *cloud, false);

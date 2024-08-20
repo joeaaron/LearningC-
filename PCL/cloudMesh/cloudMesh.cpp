@@ -27,17 +27,17 @@
 void PreprocessPointCloud(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
 {
 	// 统计滤波
-	pcl::StatisticalOutlierRemoval<pcl::PointXYZ> sor;
+	/*pcl::StatisticalOutlierRemoval<pcl::PointXYZ> sor;
 	sor.setInputCloud(cloud);
 	sor.setMeanK(10);
 	sor.setStddevMulThresh(0.5);
-	sor.filter(*cloud);
+	sor.filter(*cloud);*/
 
 	// 均匀采样
-	pcl::UniformSampling<pcl::PointXYZ> uniform;
-	uniform.setInputCloud(cloud);
-	uniform.setRadiusSearch(0.25);
-	uniform.filter(*cloud);
+	//pcl::UniformSampling<pcl::PointXYZ> uniform;
+	//uniform.setInputCloud(cloud);
+	//uniform.setRadiusSearch(0.25);
+	//uniform.filter(*cloud);
 
 	// 体素采样
 	//pcl::VoxelGrid<pcl::PointXYZ> vg;
@@ -61,7 +61,7 @@ void GreedyTriangle(pcl::PolygonMesh& triangles,
 	pcl::GreedyProjectionTriangulation<pcl::PointNormal> gp3;//定义三角化对象
 
 	// Set the maximum distance between connected points (maximum edge length)
-	gp3.setSearchRadius(4);								//设置搜索半径radius，来确定三角化时k一邻近的球半径。
+	gp3.setSearchRadius(10);								//设置搜索半径radius，来确定三角化时k一邻近的球半径。
 
 	// Set typical values for the parameters
 	gp3.setMu(3);							 //设置样本点到最近邻域距离的乘积系数 mu 来获得每个样本点的最大搜索距离，这样使得算法自适应点云密度的变化
@@ -293,7 +293,7 @@ main(int argc, char** argv)
 {
 	// Load input file into a PointCloud<T> with an appropriate type
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
-	if (pcl::io::loadPCDFile<pcl::PointXYZ>("realtimemesh.pcd", *cloud) == -1)		// sac_plane_test.pcd | 800w.pcd | table_scene_lms400.pcd
+	if (pcl::io::loadPCDFile<pcl::PointXYZ>("project.pcd", *cloud) == -1)		// sac_plane_test.pcd | 800w.pcd | table_scene_lms400.pcd
 	{
 		PCL_ERROR("点云读取失败 \n");
 		return (-1);
@@ -309,7 +309,7 @@ main(int argc, char** argv)
 	tree->setInputCloud(cloud);																//用cloud构造tree对象
 	ne.setInputCloud(cloud);																//为法线估计对象设置输入点云
 	ne.setSearchMethod(tree);																//设置搜索方法
-	ne.setKSearch(20);																		//设置k邻域搜素的搜索范围
+	ne.setKSearch(100);																		//设置k邻域搜素的搜索范围
 	ne.setNumberOfThreads(4);
 	ne.compute(*normals);																	//估计法线
 	//* normals should not contain the point normals + surface curvatures
@@ -353,71 +353,73 @@ main(int argc, char** argv)
 	//}
 	
 	// 使用Laplacian光顺算法
-	pcl::MeshSmoothingLaplacianVTK smoother;
-	pcl::PolygonMesh smoothed_mesh;
-	smoother.setInputMesh(triangles);
-	smoother.setNumIter(100); // 设置迭代次数
-	smoother.setConvergence(0.001); // 设置收敛标准
-	smoother.setRelaxationFactor(0.1); // 设置松弛因子
-	smoother.process(smoothed_mesh);
+	//pcl::MeshSmoothingLaplacianVTK smoother;
+	//pcl::PolygonMesh smoothed_mesh;
+	//smoother.setInputMesh(triangles);
+	//smoother.setNumIter(100); // 设置迭代次数
+	//smoother.setConvergence(0.001); // 设置收敛标准
+	//smoother.setRelaxationFactor(0.1); // 设置松弛因子
+	//smoother.process(smoothed_mesh);
 
 	// 光顺不改变面片数
 	//polygonNums = smoothed_mesh.polygons.size();
 	//std::cout << "光顺后面片数：" << polygonNums << std::endl;
-#if ENABLE_DISPLAY
-	//----------------------------------结果可视化-----------------------------------
-	boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer(new pcl::visualization::PCLVisualizer("3D Viewer"));
-	viewer->setWindowName(u8"光顺后的模型");
 
-	viewer->addPolygonMesh(smoothed_mesh, "my");                 // 可视化模型重建结果
-	viewer->setRepresentationToSurfaceForAllActors();            // 网格模型以线框图模式显示
-	//viewer->addCoordinateSystem(0.2);
-	viewer->initCameraParameters();
-	viewer->spin();
-	while (!viewer->wasStopped())
-	{
-		viewer->spinOnce(100);
-		
-	}
-#endif
+//#if ENABLE_DISPLAY
+//	//----------------------------------结果可视化-----------------------------------
+//	boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer(new pcl::visualization::PCLVisualizer("3D Viewer"));
+//	viewer->setWindowName(u8"光顺后的模型");
+//	//viewer->addPointCloud(cloud, "cloud");
+//	viewer->addPolygonMesh(smoothed_mesh, "my");                 // 可视化模型重建结果
+//	viewer->setRepresentationToSurfaceForAllActors();            // 网格模型以线框图模式显示
+//	//viewer->addCoordinateSystem(0.2);
+//	viewer->initCameraParameters();
+//	viewer->resetCamera();
+//	viewer->spin();
+//	while (!viewer->wasStopped())
+//	{
+//		viewer->spinOnce(100);
+//		
+//	}
+//#endif
 
-	// 网格简化
-	vtkSmartPointer<vtkPolyData> vtkMesh;
-	pcl::VTKUtils::convertToVTK(smoothed_mesh, vtkMesh);
+	//// 网格简化
+	//vtkSmartPointer<vtkPolyData> vtkMesh;
+	//pcl::VTKUtils::convertToVTK(smoothed_mesh, vtkMesh);
 
-	// 使用VTK的DecimatePro 进行简化
-	vtkSmartPointer<vtkDecimatePro> decimate = vtkSmartPointer<vtkDecimatePro>::New();
-	decimate->SetInputData(vtkMesh);
-	decimate->SetTargetReduction(0.5);   // 减少50%的面
-	decimate->Update();
+	//// 使用VTK的DecimatePro 进行简化
+	//vtkSmartPointer<vtkDecimatePro> decimate = vtkSmartPointer<vtkDecimatePro>::New();
+	//decimate->SetInputData(vtkMesh);
+	//decimate->SetTargetReduction(0.5);   // 减少50%的面
+	//decimate->Update();
 
-	// 将简化后的VTK网格转回PCL
-	vtkSmartPointer<vtkPolyData> simplifiedVTKMesh = decimate->GetOutput();
-	pcl::PolygonMesh simplifiedMesh;
-	pcl::VTKUtils::convertToPCL(simplifiedVTKMesh, simplifiedMesh);
+	//// 将简化后的VTK网格转回PCL
+	//vtkSmartPointer<vtkPolyData> simplifiedVTKMesh = decimate->GetOutput();
+	//pcl::PolygonMesh simplifiedMesh;
+	//pcl::VTKUtils::convertToPCL(simplifiedVTKMesh, simplifiedMesh);
 
-	polygonNums = simplifiedMesh.polygons.size();
-	std::cout << "简化后的面片数：" << polygonNums << std::endl;
+	//polygonNums = simplifiedMesh.polygons.size();
+	//std::cout << "简化后的面片数：" << polygonNums << std::endl;
 
-#if ENABLE_DISPLAY
-	//----------------------------------结果可视化-----------------------------------
-	viewer->setWindowName(u8"简化后的面片");
-	int v1(0), v2(0);
-	viewer->createViewPort(0, 0, 0.5, 1, v1);
-	viewer->createViewPort(0.5, 0, 1, 1, v2);
-	viewer->setBackgroundColor(0, 0, 0, v1);
-	viewer->setBackgroundColor(0.3, 0.3, 0.3, v2);
-	viewer->addPointCloud<pcl::PointXYZ>(cloud, "cloud", v1);	  // 可视化点云
-	viewer->addPolygonMesh(simplifiedMesh, "my", v2);             // 可视化模型重建结果
-	viewer->setRepresentationToSurfaceForAllActors();             // 网格模型以线框图模式显示
-	//viewer->initCameraParameters();
-	viewer->initCameraParameters();
-	viewer->spin();
-	while (!viewer->wasStopped())
-	{
-		viewer->spinOnce(100);
-	}
-#endif
-
-	return (0);
+//#if ENABLE_DISPLAY
+//	//----------------------------------结果可视化-----------------------------------
+//	viewer->setWindowName(u8"简化后的面片");
+//	int v1(0), v2(0);
+//	viewer->createViewPort(0, 0, 0.5, 1, v1);
+//	viewer->createViewPort(0.5, 0, 1, 1, v2);
+//	viewer->setBackgroundColor(0, 0, 0, v1);
+//	viewer->setBackgroundColor(0.3, 0.3, 0.3, v2);
+//	viewer->addPointCloud<pcl::PointXYZ>(cloud, "cloud", v1);	  // 可视化点云
+//	viewer->addPolygonMesh(simplifiedMesh, "my", v2);             // 可视化模型重建结果
+//	viewer->setRepresentationToSurfaceForAllActors();             // 网格模型以线框图模式显示
+//	//viewer->initCameraParameters();
+//	viewer->initCameraParameters();
+//	viewer->spin();
+//	while (!viewer->wasStopped())
+//	{
+//		viewer->spinOnce(100);
+//	}
+//#endif
+//
+//	return (0);
 }
