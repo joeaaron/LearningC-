@@ -106,16 +106,8 @@ void GetSlice(pcl::PointCloud<pcl::PointXYZ>::Ptr& sliceCloud, const pcl::PointC
 #endif
 }
 
-int main(int argc, char** argv)
+void ProjMethod(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud)
 {
-	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
-
-	if (pcl::io::loadPCDFile<pcl::PointXYZ>("pmt.pcd", *cloud) == -1)		// sac_plane_test.pcd | Scan_0511_1713.pcd
-	{
-		PCL_ERROR("点云读取失败 \n");
-		return (-1);
-	}
-
 	// 任意平面
 	Eigen::Vector3d center(4.734, 9.470, 1.706);
 	Eigen::Vector3d n(0.267, 0.535, 0.802);
@@ -241,5 +233,164 @@ int main(int argc, char** argv)
 
 	viewportsVis(cloud, surface_hull, polygons);
 	*/
+}
+
+// Step 1: 计算点云密度
+double ComputeDensity(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud, int N, int m) 
+{
+	pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
+	kdtree.setInputCloud(cloud);
+
+	std::vector<double> vDensities;
+	for (int i = 0; i < N; ++i) {
+		std::vector<int> pointIdxNKNSearch(m);
+		std::vector<float> pointNKNSquaredDistance(m);
+
+		pcl::PointXYZ searchPoint = (*cloud)[rand() % cloud->points.size()];
+
+		if (kdtree.nearestKSearch(searchPoint, m, pointIdxNKNSearch, pointNKNSquaredDistance) > 0)
+		{
+			double density = 0.0;
+			for (double dist : pointNKNSquaredDistance)
+				density += sqrt(dist);
+			vDensities.push_back(density / m);
+		}
+	}
+	return std::accumulate(vDensities.begin(), vDensities.end(), 0.0) / vDensities.size();
+
+	//// 输出密度信息或做其他处理
+	//for (auto density : densities)
+	//	std::cout << "Density: " << density << std::endl;
+}
+
+// Step 2: 得到左右点云 (假设我们沿着Z轴切片)
+void SlicePointCloud(
+	pcl::PointCloud<pcl::PointXYZ>::Ptr lpoints,
+	pcl::PointCloud<pcl::PointXYZ>::Ptr rpoints,
+	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud,
+	double dPos, double delta)
+{
+	for (const auto& point : cloud->points) 
+	{
+		if (point.z >= dPos - delta / 2 && point.z <= dPos)
+		{
+			lpoints->points.push_back(point);
+		}
+		else if (point.z > dPos && point.z <= dPos + delta / 2)
+		{
+			rpoints->points.push_back(point);
+		}
+	}
+
+	std::cout << "Lpoints: " << lpoints->points.size() << ", Rpoints: " << rpoints->points.size() << std::endl;
+}
+
+// Step 3: 匹配 lpoint 和 rpoint 并计算交点
+void FindCorres(pcl::PointCloud<pcl::PointXYZ>::Ptr lpoints, 
+	pcl::PointCloud<pcl::PointXYZ>::Ptr rpoints, double dPos, double threshold)
+{
+	pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
+	kdtree.setInputCloud(rpoints);
+
+	pcl::PointCloud<pcl::PointXYZ>::Ptr sliceCloud(new pcl::PointCloud<pcl::PointXYZ>);
+
+	for (const auto& lpoint : lpoints->points) 
+	{
+		// 平面上的点直接加进去
+		if (std::abs(lpoint.z - dPos) < 1e-4)
+		{
+			sliceCloud->points.push_back(lpoint);
+			continue;
+		}
+
+		std::vector<int> pointIdxNKNSearch(1);
+		std::vector<float> pointNKNSquaredDistance(1);
+
+		if (kdtree.nearestKSearch(lpoint, 1, pointIdxNKNSearch, pointNKNSquaredDistance) > 0)
+		{
+			float dist = sqrt(pointNKNSquaredDistance[0]);
+			if (dist < threshold) 
+			{
+				pcl::PointXYZ rpoint = rpoints->points[pointIdxNKNSearch[0]];
+
+				//// 计算交点，假设我们在Z方向切片
+				pcl::PointXYZ intersection;
+				//float ratio = (lpoint.z) / (lpoint.z - rpoint.z);
+				//intersection.x = lpoint.x + ratio * (rpoint.x - lpoint.x);
+				//intersection.y = lpoint.y + ratio * (rpoint.y - lpoint.y);
+				//intersection.z = 0.0f;  // 交点在切片平面上
+
+				double dCoef1 = dPos - lpoint.z;
+				double dCoef2 = rpoint.z - lpoint.z;
+
+				if (fabs(dCoef2) < DBL_EPSILON) return;
+
+				intersection.x = dCoef1 * (rpoint.x - lpoint.x) / dCoef2 + lpoint.x;
+				intersection.y = dCoef1 * (rpoint.y - lpoint.y) / dCoef2 + lpoint.y;
+				intersection.z = dPos;
+
+				sliceCloud->points.push_back(intersection);
+			}
+		}
+	}
+
+#if ENABLE_DISPLAY
+	pcl::visualization::PCLVisualizer viewer("Viewer");
+	viewer.addPointCloud(sliceCloud);
+	viewer.resetCamera();
+
+	// 等待直到视图关闭
+	while (!viewer.wasStopped())
+	{
+		viewer.spinOnce(100);
+	}
+#endif
+
+	std::cout << "Intersection points: " << sliceCloud->points.size() << std::endl;
+}
+
+void IntersectMethod(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud)
+{
+	// Step 1: 计算点云密度
+	double dDelta = ComputeDensity(cloud, 100, 5);
+	double dPos = -17.7557755;
+
+	// Step 2: 得到左右点云 (假设我们沿着Z轴切片)
+	pcl::PointCloud<pcl::PointXYZ>::Ptr lpoints(new pcl::PointCloud<pcl::PointXYZ>);
+	pcl::PointCloud<pcl::PointXYZ>::Ptr rpoints(new pcl::PointCloud<pcl::PointXYZ>);
+	SlicePointCloud(lpoints, rpoints, cloud, dPos, 10 * dDelta);
+
+#if ENABLE_DISPLAY
+	pcl::visualization::PCLVisualizer viewer("Viewer");
+	viewer.addPointCloud(rpoints);
+	viewer.resetCamera();
+
+	// 等待直到视图关闭
+	while (!viewer.wasStopped())
+	{
+		viewer.spinOnce(100);
+	}
+#endif
+
+	// Step 3: 匹配 lpoint 和 rpoint 并计算交点
+	FindCorres(lpoints, rpoints, dPos, 8 * dDelta);
+}
+
+int main(int argc, char** argv)
+{
+	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
+
+	if (pcl::io::loadPCDFile<pcl::PointXYZ>("pmt.pcd", *cloud) == -1)		// sac_plane_test.pcd | Scan_0511_1713.pcd
+	{
+		PCL_ERROR("点云读取失败 \n");
+		return (-1);
+	}
+
+	// 投影法
+	//ProjMethod(cloud);
+
+	// 求交法
+	IntersectMethod(cloud);
+
 	return 0;
 }

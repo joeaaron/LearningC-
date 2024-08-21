@@ -14,6 +14,7 @@
 // 标准文件
 #include <string>
 #include <iostream>
+#include <algorithm>
 
 // PCL
 #include <pcl/io/pcd_io.h>
@@ -535,7 +536,10 @@ bool ExtractConcaveHull2D(std::vector<Vertex2D>& points,
 }
 
 // 计算相邻点之间的距离，并根据阈值判断
-std::vector<bool> CheckDistances(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud, double threshold) 
+std::vector<bool> CheckDistances(double& dAvg,
+	double& dStd, double& dMax, double& dMin,
+	const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud,
+	double threshold) 
 {
 	size_t numPoints = cloud->points.size();
 	std::vector<bool> distancesValid(numPoints);
@@ -545,25 +549,68 @@ std::vector<bool> CheckDistances(const pcl::PointCloud<pcl::PointXYZ>::Ptr& clou
 		return distancesValid;
 	}
 
-#pragma omp parallel for
+	std::vector<double> vDis;
+//#pragma omp parallel for
 	for (int i = 0; i < numPoints; ++i) 
 	{
 		size_t nextIndex = (i + 1) % numPoints; // 最后一个点与第一个点相连
 		const pcl::PointXYZ& pt1 = cloud->points[i];
 		const pcl::PointXYZ& pt2 = cloud->points[nextIndex];
-
-		double distance = std::sqrt(
+		auto distance = pcl::euclideanDistance(pt1, pt2);
+		/*double distance = std::sqrt(
 			std::pow(pt1.x - pt2.x, 2) +
 			std::pow(pt1.y - pt2.y, 2) +
 			std::pow(pt1.z - pt2.z, 2)
-		);
-
+		);*/
+		vDis.emplace_back(distance);
 		// 判断距离是否在阈值范围内
 		distancesValid[i] = (distance <= threshold);
 	}
+	dAvg = std::accumulate(vDis.begin(), vDis.end(), 0.0) / vDis.size();
+	double dSqu = std::inner_product(vDis.begin(), vDis.end(), vDis.begin(), 0.0f);
+	dStd = std::sqrt(dSqu / vDis.size() - dAvg * dAvg);
+
+	dMax = *std::max_element(vDis.begin(), vDis.end());
+	dMin = *std::min_element(vDis.begin(), vDis.end());
+
+	/*double variance = 0.0;
+	for (double value : vDis) {
+		variance += (value - dAvg) * (value - dAvg);
+	}
+	variance /= vDis.size();
+	dStd = std::sqrt(variance);*/
 
 	return distancesValid;
 }
+
+// 计算点云的平均距离和标准差
+void ComputeDistanceStats(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud,
+	double& average_distance, double& std_dev) 
+{
+	std::vector<double> distances;
+	pcl::search::KdTree<pcl::PointXYZ> kdtree;
+	kdtree.setInputCloud(cloud);
+
+	for (size_t i = 0; i < cloud->points.size(); ++i) 
+	{
+		std::vector<int> point_indices;
+		std::vector<float> point_distances;
+		kdtree.nearestKSearch(cloud->points[i], 2, point_indices, point_distances);
+		if (point_distances.size() > 1) 
+		{
+			distances.push_back(point_distances[1]); // 距离第一个最近邻的点
+		}
+	}
+
+	// 计算平均距离
+	float sum = std::accumulate(distances.begin(), distances.end(), 0.0f);
+	average_distance = sum / distances.size();
+
+	// 计算标准差
+	float sq_sum = std::inner_product(distances.begin(), distances.end(), distances.begin(), 0.0f);
+	std_dev = std::sqrt(sq_sum / distances.size() - average_distance * average_distance);
+}
+
 
 CCPolyline* ExtractFlatEnvelope(PointCloud* points,
 	PointCoordinateType maxEdgeLength,
@@ -731,6 +778,14 @@ CCPolyline* ExtractFlatEnvelope(PointCloud* points,
 		viewer.spinOnce(100);
 	}
 #endif
+
+	double threshold = 1.5;				// 设置采样间距
+	double dAvg = 0.0;					// 平均距离
+	double dStd = 0.0;					// 标准差距离
+	double dMax = 0.0;					// 最大距离
+	double dMin = 0.0;					// 最小距离
+	std::vector<bool> validDistances = CheckDistances(dAvg, dStd, dMax, dMin, cloud, threshold);
+	//ComputeDistanceStats(cloud, dAvg, dStd);
 	// 创建KD-Tree对象用于搜索
 	pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
 	tree->setInputCloud(cloud);
@@ -738,8 +793,8 @@ CCPolyline* ExtractFlatEnvelope(PointCloud* points,
 	// 欧几里德聚类提取器
 	std::vector<pcl::PointIndices> cluster_indices;
 	pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
-	ec.setClusterTolerance(2.5);		// 设置近邻搜索的搜索半径
-	ec.setMinClusterSize(5);			// 设置一个聚类需要的最少点数目
+	ec.setClusterTolerance(dAvg+dStd);			// 设置近邻搜索的搜索半径
+	ec.setMinClusterSize(3);			// 设置一个聚类需要的最少点数目
 	ec.setMaxClusterSize(1000);			// 设置一个聚类需要的最大点数目
 	ec.setSearchMethod(tree);
 	ec.setInputCloud(cloud);
@@ -828,13 +883,14 @@ inline Eigen::Vector4d CalcPlane(Eigen::Vector3d center, Eigen::Vector3d normal)
 
 void GetSlice(pcl::PointCloud<pcl::PointXYZ>::Ptr& sliceCloud, const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud, const Eigen::Vector4d& n, double delta)
 {
-	//double delta = 0.2;			// 设置切片的0.5倍厚度,厚度和点云密度相关
+	//double delta = 0.2;			
 	std::vector<int> pointIdx;
 
 	for (int i = 0; i < cloud->size(); ++i)
 	{
-		double wr = n[0] * (*cloud)[i].x + n[1] * (*cloud)[i].y + n[2] * (*cloud)[i].z + n[3] - delta;
-		double wl = n[0] * (*cloud)[i].x + n[1] * (*cloud)[i].y + n[2] * (*cloud)[i].z + n[3] + delta;
+		double dPtToPlane = n[0] * (*cloud)[i].x + n[1] * (*cloud)[i].y + n[2] * (*cloud)[i].z + n[3];
+		double wr = dPtToPlane - delta;
+		double wl = dPtToPlane + delta;
 		if (wr * wl <= 0)
 		{
 			pointIdx.emplace_back(i);
@@ -1055,7 +1111,7 @@ int main()
 	auto endOp = std::chrono::high_resolution_clock::now();
 	std::chrono::duration<double> elapsedOp = endOp - startOp;
 	std::cout << "点云切片算法用时: " << elapsedOp.count() << " seconds" << std::endl;
-	
+
 	// ****************************保存数据******************************
 	//pcl::PLYWriter writer;
 	//writer.write("result.ply", *cloud, false);

@@ -23,8 +23,8 @@
 #include "MyPPFRegistration.hpp"
 
 const int SAMPLE_POINTS = 1000000;
-const float MODEL_LEAF_SIZE = 1.0f;
-const float SCENE_LEAF_SIZE = 0.001f;
+const float MODEL_LEAF_SIZE = 7.0f;
+const float SCENE_LEAF_SIZE = 0.02f;
 
 bool bCalNormal = true;
 bool bCalColor = false;
@@ -324,7 +324,7 @@ int main()
 {
 	//Load model
 	pcl::PolygonMesh mesh;
-	if (pcl::io::loadPolygonFileSTL("Prismatic002.stl", mesh) == -1)		//Prismatic002.stl model.STL
+	if (pcl::io::loadPolygonFileSTL("cad.stl", mesh) == -1)		//Prismatic002.stl model.STL
 	{
 		PCL_ERROR("STL∂¡»° ß∞‹ \n");
 		return (-1);
@@ -332,7 +332,7 @@ int main()
 
 	//Load scene
 	pcl::PointCloud<pcl::PointXYZRGBA>::Ptr cloudScene(new pcl::PointCloud<pcl::PointXYZRGBA>);
-	if (pcl::io::loadPCDFile<pcl::PointXYZRGBA>("Prismatic002.pcd", *cloudScene) == -1) //* load the file Prismatic002.pcd scene.pcd
+	if (pcl::io::loadPCDFile<pcl::PointXYZRGBA>("cad.pcd", *cloudScene) == -1) //* load the file Prismatic002.pcd scene.pcd
 	{
 		PCL_ERROR("Couldn't read file\n");
 		return (-1);

@@ -716,8 +716,8 @@ CCPolyline* ExtractFlatEnvelope(PointCloud* points,
 	// 欧几里德聚类提取器
 	std::vector<pcl::PointIndices> cluster_indices;
 	pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
-	ec.setClusterTolerance(1.5);		// 设置近邻搜索的搜索半径
-	ec.setMinClusterSize(5);		// 设置一个聚类需要的最少点数目
+	ec.setClusterTolerance(5);		// 设置近邻搜索的搜索半径
+	ec.setMinClusterSize(3);		// 设置一个聚类需要的最少点数目
 	ec.setMaxClusterSize(1000);		// 设置一个聚类需要的最大点数目
 	ec.setSearchMethod(tree);
 	ec.setInputCloud(cloud);
@@ -955,7 +955,7 @@ int main()
 	//Eigen::Vector3d normal(1, 0, 0);
 
 	// Z轴
-	Eigen::Vector3d center(-0.001, 0, -13.305);
+	Eigen::Vector3d center(-0.001, 0, -17.7557755/* -13.305*/);
 	//Eigen::Vector3d normal(0, 0, 1);
 
 	//Eigen::Vector3d center(-0.001, 0, -18.660); 
