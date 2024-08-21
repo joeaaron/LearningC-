@@ -313,7 +313,7 @@ void FindCorres(pcl::PointCloud<pcl::PointXYZ>::Ptr lpoints,
 			{
 				pcl::PointXYZ rpoint = rpoints->points[pointIdxNKNSearch[0]];
 
-				//// 计算交点，假设我们在Z方向切片
+				// 计算交点，假设我们在Z方向切片
 				pcl::PointXYZ intersection;
 				//float ratio = (lpoint.z) / (lpoint.z - rpoint.z);
 				//intersection.x = lpoint.x + ratio * (rpoint.x - lpoint.x);
@@ -349,7 +349,7 @@ void FindCorres(pcl::PointCloud<pcl::PointXYZ>::Ptr lpoints,
 	std::cout << "Intersection points: " << sliceCloud->points.size() << std::endl;
 }
 
-void IntersectMethod(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud)
+void IntersectMethodZ(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud)
 {
 	// Step 1: 计算点云密度
 	double dDelta = ComputeDensity(cloud, 100, 5);
@@ -376,6 +376,50 @@ void IntersectMethod(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud)
 	FindCorres(lpoints, rpoints, dPos, 8 * dDelta);
 }
 
+void IntersectMethod(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud)
+{
+	Eigen::Vector3d center(-25.402, -14.551, -19.163);
+	Eigen::Vector3d n(0.577, 0.577, 0.577);
+	Eigen::Vector3d z(0, 0, 1);
+
+	Eigen::Vector3d axis = n.cross(z);
+	double angle = acos(n.dot(z) / n.norm());
+
+	Eigen::AngleAxisd rotation(angle, axis.normalized());
+	Eigen::Matrix3d rotationMatrix = rotation.toRotationMatrix();
+
+	// 使用旋转矩阵旋转点云
+	Eigen::Matrix4d transMtx = Eigen::Matrix4d::Identity();
+	transMtx.block<3, 3>(0, 0) = rotationMatrix;
+
+	pcl::PointCloud<pcl::PointXYZ>::Ptr transCloud(new pcl::PointCloud<pcl::PointXYZ>);
+	transCloud = TransformCloud(cloud, transMtx);
+	Eigen::Vector3d rotatedPt = rotationMatrix * center;
+
+	// Step 1: 计算点云密度
+	double dDelta = ComputeDensity(transCloud, 100, 5);
+
+	// Step 2: 得到左右点云 (假设我们沿着Z轴切片)
+	pcl::PointCloud<pcl::PointXYZ>::Ptr lpoints(new pcl::PointCloud<pcl::PointXYZ>);
+	pcl::PointCloud<pcl::PointXYZ>::Ptr rpoints(new pcl::PointCloud<pcl::PointXYZ>);
+	SlicePointCloud(lpoints, rpoints, transCloud, rotatedPt[2], 8 * dDelta);
+
+#if ENABLE_DISPLAY
+	pcl::visualization::PCLVisualizer viewer("Viewer");
+	viewer.addPointCloud(rpoints);
+	viewer.resetCamera();
+
+	// 等待直到视图关闭
+	while (!viewer.wasStopped())
+	{
+		viewer.spinOnce(100);
+	}
+#endif
+
+	// Step 3: 匹配 lpoint 和 rpoint 并计算交点
+	FindCorres(lpoints, rpoints, rotatedPt[2], 2 * dDelta);
+}
+
 int main(int argc, char** argv)
 {
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
@@ -390,6 +434,7 @@ int main(int argc, char** argv)
 	//ProjMethod(cloud);
 
 	// 求交法
+	//IntersectMethodZ(cloud);
 	IntersectMethod(cloud);
 
 	return 0;
