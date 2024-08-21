@@ -10,8 +10,9 @@
 #include <pcl/surface/convex_hull.h>
 #include <pcl/surface/grid_projection.h>
 #include <pcl/surface/gp3.h>
+#include <chrono>
 
-#define ENABLE_DISPLAY 1		// 定义一个宏，用于控制显示状态
+#define ENABLE_DISPLAY 0		// 定义一个宏，用于控制显示状态
 using PointT = pcl::PointXYZ;
 
 inline Eigen::Vector4d CalcPlane(const pcl::PointXYZ& a, const pcl::PointXYZ& b, const pcl::PointXYZ& c)
@@ -429,13 +430,17 @@ int main(int argc, char** argv)
 		PCL_ERROR("点云读取失败 \n");
 		return (-1);
 	}
-
+	cout << "Points num = " << cloud->points.size() << std::endl;
+	auto startOp = std::chrono::high_resolution_clock::now();
 	// 投影法
 	//ProjMethod(cloud);
 
 	// 求交法
 	//IntersectMethodZ(cloud);
 	IntersectMethod(cloud);
+	auto endOp = std::chrono::high_resolution_clock::now();
+	std::chrono::duration<double> elapsedOp = endOp - startOp;
+	std::cout << "Time: " << elapsedOp.count() << " seconds" << std::endl;
 
 	return 0;
 }
