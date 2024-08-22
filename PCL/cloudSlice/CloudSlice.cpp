@@ -12,7 +12,7 @@
 #include <pcl/surface/gp3.h>
 #include <chrono>
 
-#define ENABLE_DISPLAY 0		// 定义一个宏，用于控制显示状态
+#define ENABLE_DISPLAY 1		// 定义一个宏，用于控制显示状态
 using PointT = pcl::PointXYZ;
 
 inline Eigen::Vector4d CalcPlane(const pcl::PointXYZ& a, const pcl::PointXYZ& b, const pcl::PointXYZ& c)

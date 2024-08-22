@@ -207,7 +207,7 @@ bool Mesh2CloudPCL(pcl::PointCloud<pcl::PointXYZ>& cloudOut,
 
 
 // 计算向量u与向量v之间的夹角
-void calRotation(Eigen::Vector3f u, Eigen::Vector3f v, double& angle, Eigen::Vector3f& vec)
+void CalRotation(Eigen::Vector3f u, Eigen::Vector3f v, double& angle, Eigen::Vector3f& vec)
 {
 	angle = acos(u.dot(v) / (u.norm() * v.norm()));
 	if (angle > M_PI / 2)
@@ -242,56 +242,56 @@ Eigen::Matrix4f RodriguesMatrixTranslation(Eigen::Vector3f n, double angle)
 	return  x_transform;
 }
 
+void ComputeEigenVectorPCA(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud,
+	Eigen::Vector4f& pcaCentroid,
+	Eigen::Matrix3f& eigenVectorsPCA)
+{
+	pcl::compute3DCentroid(*cloud, pcaCentroid);
+	Eigen::Matrix3f covariance;
+	pcl::computeCovarianceMatrixNormalized(*cloud, pcaCentroid, covariance);
+	Eigen::SelfAdjointEigenSolver<Eigen::Matrix3f> eigen_solver(covariance, Eigen::ComputeEigenvectors);
+	eigenVectorsPCA = eigen_solver.eigenvectors();
+}
+
 void
 ComputePCA(const pointcloud::Ptr& srcCloud, const pointcloud::Ptr& dstCloud, boost::shared_ptr<pcl::Correspondences>& cru_correspondences)
 {
 	pcl::console::TicToc time;
 	time.tic();
 
-	Eigen::Vector4f pcaCentroidtarget;//容量为4的列向量
-	pcl::compute3DCentroid(*dstCloud, pcaCentroidtarget);//计算目标点云质心
-	Eigen::Matrix3f covariance;//创建一个3行3列的矩阵，里面每个元素均为float类型
-	pcl::computeCovarianceMatrixNormalized(*dstCloud, pcaCentroidtarget, covariance);//计算目标点云协方差矩阵
-	Eigen::SelfAdjointEigenSolver<Eigen::Matrix3f> eigen_solver(covariance, Eigen::ComputeEigenvectors);//构造一个计算特定矩阵的类对象
-	Eigen::Matrix3f eigenVectorsPCA = eigen_solver.eigenvectors();//eigenvectors计算特征向量
-	Eigen::Vector3f eigenValuesPCA1 = eigenVectorsPCA.col(0);
-	Eigen::Vector3f eigenValuesPCA2 = eigenVectorsPCA.col(1);
-	Eigen::Vector3f eigenValuesPCA3 = eigenVectorsPCA.col(2);
+	Eigen::Vector4f pcaCentroidtarget;				
+	Eigen::Matrix3f eigenVectorsPCA;
+	ComputeEigenVectorPCA(dstCloud, pcaCentroidtarget, eigenVectorsPCA);			// 计算目标点云的质心和特征向量
 
 	Eigen::Vector4f pcaCentroidsource;
-	pcl::compute3DCentroid(*srcCloud, pcaCentroidsource);//计算源点云质心
-	Eigen::Matrix3f model_covariance;
-	pcl::computeCovarianceMatrixNormalized(*srcCloud, pcaCentroidsource, model_covariance);//计算源点云协方差矩阵
-	Eigen::SelfAdjointEigenSolver<Eigen::Matrix3f> modeleigen_solver(model_covariance, Eigen::ComputeEigenvectors);
-	Eigen::Matrix3f model_eigenVectorsPCA = modeleigen_solver.eigenvectors();
-	//Eigen::Vector3f model_eigenValuesPCA = modeleigen_solver.eigenvalues();
-	Eigen::Vector3f model_eigenValuesPCA1 = model_eigenVectorsPCA.col(0);
-	Eigen::Vector3f model_eigenValuesPCA2 = model_eigenVectorsPCA.col(1);
-	Eigen::Vector3f model_eigenValuesPCA3 = model_eigenVectorsPCA.col(2);
+	Eigen::Matrix3f model_eigenVectorsPCA;
+	ComputeEigenVectorPCA(srcCloud, pcaCentroidsource, model_eigenVectorsPCA);		// 计算源点云的质心和特征向量
 
-	pcl::PointCloud<pcl::PointXYZ>::Ptr target_t(new pcl::PointCloud<pcl::PointXYZ>);
-	//平移目标点云，将目标点云通过质心平移到原点
-	Eigen::Matrix4f translation_t = Eigen::Matrix4f::Identity();
-	//设置矩阵的元素
-	translation_t(0, 3) = -pcaCentroidtarget[0];
-	translation_t(1, 3) = -pcaCentroidtarget[1];
-	translation_t(2, 3) = -pcaCentroidtarget[2];
-	pcl::transformPointCloud(*dstCloud, *target_t, translation_t);
+	////平移目标点云，将目标点云通过质心平移到原点
+	//pcl::PointCloud<pcl::PointXYZ>::Ptr target_t(new pcl::PointCloud<pcl::PointXYZ>);
+	//Eigen::Matrix4f translation_t = Eigen::Matrix4f::Identity();
 
-	pcl::PointCloud<pcl::PointXYZ>::Ptr source_t(new pcl::PointCloud<pcl::PointXYZ>);
-	//平移源点云，将源点云通过质心平移到原点
-	Eigen::Matrix4f translation_s = Eigen::Matrix4f::Identity();
-	//设置矩阵的元素
-	translation_s(0, 3) = -pcaCentroidsource[0];
-	translation_s(1, 3) = -pcaCentroidsource[1];
-	translation_s(2, 3) = -pcaCentroidsource[2];
-	pcl::transformPointCloud(*srcCloud, *source_t, translation_s);
+	////设置矩阵的元素
+	//translation_t(0, 3) = -pcaCentroidtarget[0];
+	//translation_t(1, 3) = -pcaCentroidtarget[1];
+	//translation_t(2, 3) = -pcaCentroidtarget[2];
+	//pcl::transformPointCloud(*dstCloud, *target_t, translation_t);
+
+	////平移源点云，将源点云通过质心平移到原点
+	//pcl::PointCloud<pcl::PointXYZ>::Ptr source_t(new pcl::PointCloud<pcl::PointXYZ>);
+	//Eigen::Matrix4f translation_s = Eigen::Matrix4f::Identity();
+
+	////设置矩阵的元素
+	//translation_s(0, 3) = -pcaCentroidsource[0];
+	//translation_s(1, 3) = -pcaCentroidsource[1];
+	//translation_s(2, 3) = -pcaCentroidsource[2];
+	//pcl::transformPointCloud(*srcCloud, *source_t, translation_s);
 
 	// 计算旋转
 	Eigen::Vector3f n0;
 	double angle0;
 
-	calRotation(model_eigenVectorsPCA.col(2), eigenVectorsPCA.col(2), angle0, n0); // 假设最大特征值在最后一列
+	CalRotation(model_eigenVectorsPCA.col(2), eigenVectorsPCA.col(2), angle0, n0); // 假设最大特征值在最后一列
 	Eigen::Matrix4f transform = RodriguesMatrixTranslation(n0, angle0);
 
 	double dVal1 = eigenVectorsPCA.col(0).dot(model_eigenVectorsPCA.col(0));
@@ -308,20 +308,26 @@ ComputePCA(const pointcloud::Ptr& srcCloud, const pointcloud::Ptr& dstCloud, boo
 
 		transform *= rotation_4d;
 	}
-	
+
+	// 计算平移向量
+	Eigen::Matrix<float, 3, 1> T;
+	T = pcaCentroidtarget.head<3>() - transform.block<3, 3>(0, 0) * (pcaCentroidsource.head<3>());
+
+	transform.block<3, 1>(0, 3) = T;
+
 	cout << "变换矩阵为：\n" << transform << endl;
 	cout << "预对齐算法用时：" << time.toc() / 1000 << " 秒" << endl;
 
 #if ENABLE_DISPLAY
 	pcl::PointCloud<pcl::PointXYZ>::Ptr transformed_source(new pcl::PointCloud<pcl::PointXYZ>);
-	pcl::transformPointCloud(*source_t, *transformed_source, transform);  // 预对齐后的原始点云
+	pcl::transformPointCloud(*srcCloud, *transformed_source, transform);  // 预对齐后的原始点云
 
 	boost::shared_ptr<pcl::visualization::PCLVisualizer>viewer(new pcl::visualization::PCLVisualizer(u8"预对齐点云"));
 	viewer->setBackgroundColor(255, 255, 255);
 
 	// 对目标点云着色可视化 (red).
 	pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ>target_color(dstCloud, 255, 0, 0);
-	viewer->addPointCloud<pcl::PointXYZ>(target_t, target_color, "target cloud");
+	viewer->addPointCloud<pcl::PointXYZ>(dstCloud, target_color, "target cloud");
 	viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 2, "target cloud");
 	
 	// 对源点云着色可视化 (green).
@@ -335,12 +341,13 @@ ComputePCA(const pointcloud::Ptr& srcCloud, const pointcloud::Ptr& dstCloud, boo
 		boost::this_thread::sleep(boost::posix_time::microseconds(100000));
 	}
 #endif
+
 	//进行精确配准，采用ICP算法
 	pcl::PointCloud<pcl::PointXYZ>::Ptr icp_result(new pcl::PointCloud<pcl::PointXYZ>());
 	pcl::IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ> icp;
 	//输入待配准点云和目标点云
-	icp.setInputSource(source_t);
-	icp.setInputTarget(target_t);
+	icp.setInputSource(srcCloud);
+	icp.setInputTarget(dstCloud);
 	//Set the max correspondence distance to 4cm (e.g., correspondences with higher distances will be ignored)
 	icp.setMaxCorrespondenceDistance(40);
 	//最大迭代次数
@@ -349,7 +356,7 @@ ComputePCA(const pointcloud::Ptr& srcCloud, const pointcloud::Ptr& dstCloud, boo
 	icp.setTransformationEpsilon(1e-10);
 	// 均方误差
 	icp.setEuclideanFitnessEpsilon(0.002);
-	icp.align(*icp_result, transform );
+	icp.align(*icp_result, transform);
 	Eigen::Matrix4f icp_trans;
 	icp_trans = icp.getFinalTransformation();
 	std::cout << "icp变换矩阵：" << endl << icp_trans << endl;
@@ -357,13 +364,15 @@ ComputePCA(const pointcloud::Ptr& srcCloud, const pointcloud::Ptr& dstCloud, boo
 	
 #if ENABLE_DISPLAY
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_output(new pcl::PointCloud<pcl::PointXYZ>());
-	pcl::transformPointCloud(*source_t, *cloud_output, icp_trans);		  // 最佳拟合对齐后的点云	
+	pcl::transformPointCloud(*srcCloud, *cloud_output, icp_trans);		  // 最佳拟合对齐后的点云	
 
 	boost::shared_ptr<pcl::visualization::PCLVisualizer>viewer1(new pcl::visualization::PCLVisualizer(u8"精对齐点云"));
 	viewer1->setBackgroundColor(255, 255, 255);
+
 	// 对目标点云着色可视化 (red).
-	viewer1->addPointCloud<pcl::PointXYZ>(target_t, target_color, "target cloud");
+	viewer1->addPointCloud<pcl::PointXYZ>(dstCloud, target_color, "target cloud");
 	viewer1->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 2, "target cloud");
+	
 	// 对源点云着色可视化 (green).
 	viewer1->addPointCloud<pcl::PointXYZ>(cloud_output, input_color, "input cloud");
 	viewer1->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 2, "input cloud");
@@ -379,15 +388,8 @@ ComputePCA(const pointcloud::Ptr& srcCloud, const pointcloud::Ptr& dstCloud, boo
 int
 main(int argc, char** argv)
 {
-	/*pointcloud::Ptr source_cloud(new pointcloud);
-	pointcloud::Ptr target_cloud(new pointcloud);*/
-
-	/*pcl::io::loadPCDFile<pcl::PointXYZ>("pig_view1.pcd", *source_cloud);
-	pcl::io::loadPCDFile<pcl::PointXYZ>("pig_view2.pcd", *target_cloud);*/
-
-
 	pcl::PolygonMesh mesh;
-	if (pcl::io::loadPolygonFileSTL("TestCase01.stl", mesh) == -1)		//Prismatic002.stl model.stl 1600w.stl cad.stl
+	if (pcl::io::loadPolygonFileSTL("model.stl", mesh) == -1)		// model.stl Prismatic002.stl cad.stl Testcase01.stl 
 	{
 		PCL_ERROR("STL读取失败 \n");
 		return (-1);
@@ -397,7 +399,7 @@ main(int argc, char** argv)
 
 	//Load scene
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloudScene(new pcl::PointCloud<pcl::PointXYZ>);
-	if (pcl::io::loadPCDFile<pcl::PointXYZ>("TestCase01.pcd", *cloudScene) == -1) 
+	if (pcl::io::loadPCDFile<pcl::PointXYZ>("scene.pcd", *cloudScene) == -1)   // scene.pcd
 	{
 		PCL_ERROR("Couldn't read file\n");
 		return (-1);
