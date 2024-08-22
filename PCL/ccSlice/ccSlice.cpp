@@ -1042,19 +1042,47 @@ int main()
 
 	// ****************************获取包围盒内的点云******************************
 	// TEST CASE 01
-	Eigen::Vector3d center(-17.670, -26.448, -14.998);
-	Eigen::Vector3d n(0.577, 0.577, 0.577);
+	//Eigen::Vector3d center(-25.402, -14.551, -19.163);
+	//Eigen::Vector3d n(0.577, 0.577, 0.577);
 
 	// TEST CASE 02
 	/*Eigen::Vector3d center(1.947, 3.896, -6.655);
 	Eigen::Vector3d n(0.267, 0.535, 0.802);*/
 
-	// 任意平面
+	// TEST CASE 03
 	//Eigen::Vector3d center(4.734, 9.470, 1.706);
 	//Eigen::Vector3d n(0.267, 0.535, 0.802);
-	Eigen::Vector3d z(0, 0, 1);
 
-	Eigen::Vector3d axis = n.cross(z);
+	// TEST CASE 04
+	//Eigen::Vector3d center(38.996, -40.695, -0.002);
+	//Eigen::Vector3d n(1, 2, 3);
+
+	// TEST CASE 05
+	//Eigen::Vector3d center(-53.674, -32.091, 0.002);
+	//Eigen::Vector3d n(1, 1, 3);
+
+	// TEST CASE 06
+	//Eigen::Vector3d center(-95.978, 45.836, 0.005);
+	//Eigen::Vector3d n(1, 3, 3);
+
+	// TEST CASE 07
+	//Eigen::Vector3d center(90.039, 85.834,-24.997);
+	//Eigen::Vector3d n(2, 3, 3);
+
+	// TEST CASE 08
+	//Eigen::Vector3d center(-5.553, -34.169, -25.007);
+	//Eigen::Vector3d n(1, 3, 1);
+
+	// TEST CASE 09
+	//Eigen::Vector3d center(-43.953, 23.834, -4.247);
+	//Eigen::Vector3d n(3, 2, 1 );
+
+	// TEST CASE 10
+	Eigen::Vector3d center(95.665, 72.443, -16.049);
+	Eigen::Vector3d n(10, 12, 20);
+
+	Eigen::Vector3d z(0, 0, 1);
+	Eigen::Vector3d axis = n.normalized().cross(z);
 	double angle = acos(n.dot(z) / n.norm());
 
 	Eigen::AngleAxisd rotation(angle, axis.normalized());
@@ -1073,9 +1101,9 @@ int main()
 	pcl::PointCloud<pcl::PointXYZ>::Ptr sliceCloud(new pcl::PointCloud<pcl::PointXYZ>);
 	GetSlice(sliceCloud, rotatedCloud, plane, dAvgDis*0.5);
 
-	pcl::PLYWriter writer;
-	writer.write("slice0820.ply", *sliceCloud, false);
-	std::cout << "保存成功！" << std::endl;
+	//pcl::PLYWriter writer;
+	//writer.write("slice0820.ply", *sliceCloud, false);
+	//std::cout << "保存成功！" << std::endl;
 // 
 	// 根据包围盒对角线距离设置maxEdgeLength
 	PointCoordinateType maxEdgeLength = CalcBoxDis(sliceCloud) / 100.0;   
@@ -1092,19 +1120,19 @@ int main()
 
 	// ****************************切片算法******************************
 	PointCloud* points = static_cast<PointCloud*>(&ccCloud);
-	PointCoordinateType* preferredNormDir = nullptr;
-	PointCoordinateType* preferredUpDir = nullptr;
+	PointCoordinateType* preferredNormDir = new PointCoordinateType[3]{ 0.0, 0.0, 1.0 };
+	PointCoordinateType* preferredUpDir = new PointCoordinateType[3]{ 0.0, -1.0, 0.0 };
 
 	// TEST CASE 01
-	/*preferredNormDir = new PointCoordinateType[3]{ 0.577, 0.577, 0.577 };
-	preferredUpDir = new PointCoordinateType[3]{ -0.408, -0.408, 0.816 };*/
+	///*preferredNormDir = new PointCoordinateType[3]{ 0.577, 0.577, 0.577 };
+	//preferredUpDir = new PointCoordinateType[3]{ -0.408, -0.408, 0.816 };*/
 
 	// TEST CASE 02
-	/*preferredNormDir = new PointCoordinateType[3]{ 0.267, 0.535, 0.802 };
-	preferredUpDir = new PointCoordinateType[3]{ -0.359, -0.717, 0.598 };*/
+	///*preferredNormDir = new PointCoordinateType[3]{ 0.267, 0.535, 0.802 };
+	//preferredUpDir = new PointCoordinateType[3]{ -0.359, -0.717, 0.598 };*/
 
-	preferredNormDir = new PointCoordinateType[3]{ 0.0, 0.0, 1.0 };
-	preferredUpDir = new PointCoordinateType[3]{ 0.0, -1.0, 0.0 };
+	//preferredNormDir = new PointCoordinateType[3]{ 0.0, 0.0, 1.0 };
+	//preferredUpDir = new PointCoordinateType[3]{ 0.0, -1.0, 0.0 };
 
 	auto startOp = std::chrono::high_resolution_clock::now();
 	CCPolyline* polyLine = ExtractFlatEnvelope(points, maxEdgeLength, preferredNormDir, preferredUpDir);
