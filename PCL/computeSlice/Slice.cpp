@@ -64,14 +64,14 @@ namespace
 			0, 0, 1, 0,
 			0, 0, 0, 1;
 
-		// 计算 R4 = R2 * R1, R5 = R3 * R4
-		Eigen::Matrix4d R4 = R2 * R1;
-		Eigen::Matrix4d R5 = R3 * R4;
-	
+		transData.m_mtxR = R3 * R2 * R1;
+
 		// 平移向量
-		Eigen::Vector4d T5(0, transData.m_move[0], transData.m_move[1], transData.m_move[2]);
+		Eigen::Vector4d T(0, transData.m_move[0], transData.m_move[1], transData.m_move[2]);
+		transData.m_vecT = T;
 
 		// 旋转和平移点云
+#pragma omp parallel for collapse(2)
 		for (int k = 1; k < lCloudNum; k++)
 		{
 			for (int i = 0; i < 4; i++)
@@ -86,10 +86,10 @@ namespace
 				// 点云旋转平移后的坐标 p2 = R5 * p1 + T5
 				Eigen::Vector4d p1;
 				p1.head<3>() = p.tail<3>();
-				Eigen::Vector4d transPt = R5 * p1;
+				Eigen::Vector4d transPt = transData.m_mtxR * p1;
 				if (i > 0)
 				{
-					transPt += T5;
+					transPt += T;
 				}
 
 				Eigen::Vector4d result;
@@ -125,10 +125,7 @@ namespace
 		//viewer->initCameraParameters();
 		//viewer->resetCamera();
 		//viewer->spin();
-
-		// 记录旋转矩阵和平移向量
-		transData.m_mtxR = R5;
-		transData.m_vecT = T5;
+		
 	}
 
 
