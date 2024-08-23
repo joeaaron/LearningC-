@@ -380,12 +380,12 @@ void IntersectMethodZ(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud)
 void IntersectMethod(pcl::PointCloud<pcl::PointXYZ>::Ptr sliceCloud, const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud)
 {
 	// TEST CASE 01
-	Eigen::Vector3d center(-25.402, -14.551, -19.163); 
-	Eigen::Vector3d n(0.577, 0.577, 0.577);
+	//Eigen::Vector3d center(-25.402, -14.551, -19.163); 
+	//Eigen::Vector3d n(0.577, 0.577, 0.577);
 
 	// TEST CASE 02
-	//Eigen::Vector3d center(-95.978, 45.836, 0.005);
-	//Eigen::Vector3d n(1, 3, 3);
+	Eigen::Vector3d center(-95.978, 45.836, 0.005);
+	Eigen::Vector3d n(1, 3, 3);
 
 	// TEST CASE 03
 	//Eigen::Vector3d center(95.665, 72.443, -16.049);
@@ -555,6 +555,20 @@ double CalculateAngle(const pcl::PointXYZ& origin, const pcl::PointXYZ& p1, cons
 	return angle;
 }
 
+PointT FindStartPt(const PointCloud::Ptr& cloud)
+{
+	PointT startPt = cloud->points[0];
+	for (const auto& pt : cloud->points)
+	{
+		if (pt.x < startPt.x || (pt.x == startPt.x && pt.y < startPt.y))
+		{
+			startPt = pt;
+		}
+	}
+
+	return startPt;
+}
+
 PointCloud::Ptr SortPointsUsingKDTreeEx(const PointCloud::Ptr& cloud)
 {
 	// 构建 k-d Tree
@@ -579,7 +593,7 @@ PointCloud::Ptr SortPointsUsingKDTreeEx(const PointCloud::Ptr& cloud)
 	PointCloud::Ptr sortedPoints(new PointCloud);
 
 	// 选择起始点，例如选择最左下角的点
-	pcl::PointXYZ startPoint = cloud->points[0];  // 假设选择第一个点作为起始点
+	pcl::PointXYZ startPoint = FindStartPt(cloud);    // cloud->points[0];  假设选择第一个点作为起始点
 	sortedPoints->points.push_back(startPoint);
 
 	std::vector<bool> used(cloud->points.size(), false);

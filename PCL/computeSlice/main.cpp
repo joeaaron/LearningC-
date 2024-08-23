@@ -39,20 +39,24 @@ int main(int argc, char** argv)
 {
 	//输入STL格式
 	SliceBuf* buf = new SliceBuf();
-	SLT2Cloud("test1.stl", buf);
+	SLT2Cloud("test1.stl", buf);			// cad.stl | test1.stl
 
 	PCL_Slice slice;
 	pcl::PointCloud<pcl::PointXYZ>::Ptr pCloudOut(new pcl::PointCloud<pcl::PointXYZ>);
 
+	Eigen::Vector3d axis(1,0,0);
+	double angle = 0.0;
+
 	//Eigen::Vector3d anchorPt(-8.891, 0, 0.0);		 // X
 	//Eigen::Vector3d anchorPt(0, 1.109, 0.0);		 // Y
-	//Eigen::Vector3d anchorPt(0, 0, 9.903);		 // Z
+	//Eigen::Vector3d anchorPt(0, 0, -9.327);		 // Z
 	//Eigen::Vector3d anchorPt(32.854, -2.605, 21.810);		 // Any--取中心点
 	//Eigen::Vector3d anchorPt(-18.605, 7.795, 9.999);		 // Any--锚定位置  n(1, 6, 1);
 	//Eigen::Vector3d anchorPt(72.308, 20.916, 9.999);		 // Any--锚定位置  n(3, 6, 1);
 	//Eigen::Vector3d anchorPt(15.950, -0.744, 10.000);		 // Any--锚定位置  n(1, 2, 3);
 	//Eigen::Vector3d anchorPt(70.381, -46.068, 0.000);		 // Any--锚定位置  n(1, 1, 1);
 	Eigen::Vector3d anchorPt(17.375, 0.056, 8.992);		 // Any--锚定位置  n(0.267, 0.535, 0.802);
+
 	// X轴切割
 	//Eigen::AngleAxisd rotation(-M_PI / 2, Eigen::Vector3d::UnitY());
 	//Eigen::Matrix3d rotationMatrix = rotation.toRotationMatrix();
@@ -66,21 +70,19 @@ int main(int argc, char** argv)
 	//Eigen::Vector3d rotatedPt = rotationMatrix * anchorPt;
 	
 	// Z轴切割
-	//Eigen::Matrix3d rotationMatrix = Eigen::Matrix3d::Identity();
-	//Eigen::Vector3d eulerAngles = rotationMatrix.eulerAngles(0, 1, 2);		// XYZ顺序
-	//Eigen::Vector3d rotatedPt = rotationMatrix * anchorPt;
+	////Eigen::Matrix3d rotationMatrix = Eigen::Matrix3d::Identity();
+	////Eigen::Vector3d eulerAngles = rotationMatrix.eulerAngles(0, 1, 2);		// XYZ顺序
+	////Eigen::Vector3d rotatedPt = rotationMatrix * anchorPt;
 
 	// 任意平面
 	Eigen::Vector3d n(0.267, 0.535, 0.802);
 	Eigen::Vector3d z(0, 0, 1);
-
-	Eigen::Vector3d axis = n.cross(z);
-	double angle = acos(n.dot(z)/ n.norm());
-
+	axis = n.normalized().cross(z);
+	angle = acos(n.dot(z) / n.norm());
+	// 
+	// 共同部分
 	Eigen::AngleAxisd rotation(angle, axis.normalized());
 	Eigen::Matrix3d rotationMatrix = rotation.toRotationMatrix();
-	
-	// 共同部分
 	Eigen::Vector3d eulerAngles = rotationMatrix.eulerAngles(0, 1, 2);		// XYZ顺序
 	Eigen::Vector3d rotatedPt = rotationMatrix * anchorPt;
 
