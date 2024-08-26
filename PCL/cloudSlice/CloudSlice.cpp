@@ -361,17 +361,17 @@ void IntersectMethodZ(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud)
 	pcl::PointCloud<pcl::PointXYZ>::Ptr rpoints(new pcl::PointCloud<pcl::PointXYZ>);
 	SlicePointCloud(lpoints, rpoints, cloud, dPos, 10 * dDelta);
 
-#if ENABLE_DISPLAY
-	pcl::visualization::PCLVisualizer viewer("Viewer");
-	viewer.addPointCloud(rpoints);
-	viewer.resetCamera();
-
-	// 等待直到视图关闭
-	while (!viewer.wasStopped())
-	{
-		viewer.spinOnce(100);
-	}
-#endif
+//#if ENABLE_DISPLAY
+//	pcl::visualization::PCLVisualizer viewer("Viewer");
+//	viewer.addPointCloud(rpoints);
+//	viewer.resetCamera();
+//
+//	// 等待直到视图关闭
+//	while (!viewer.wasStopped())
+//	{
+//		viewer.spinOnce(100);
+//	}
+//#endif
 
 	// Step 3: 匹配 lpoint 和 rpoint 并计算交点
 	//FindCorres(lpoints, rpoints, dPos, 8 * dDelta);
@@ -384,12 +384,16 @@ void IntersectMethod(pcl::PointCloud<pcl::PointXYZ>::Ptr sliceCloud, const pcl::
 	//Eigen::Vector3d n(0.577, 0.577, 0.577);
 
 	// TEST CASE 02
-	Eigen::Vector3d center(-95.978, 45.836, 0.005);
-	Eigen::Vector3d n(1, 3, 3);
+	//Eigen::Vector3d center(-95.978, 45.836, 0.005);
+	//Eigen::Vector3d n(1, 3, 3);
 
 	// TEST CASE 03
 	//Eigen::Vector3d center(95.665, 72.443, -16.049);
 	//Eigen::Vector3d n(10, 12, 20);
+
+	// TEST CASE 04
+	Eigen::Vector3d center(-0.001, 33.146, -12.500);
+	Eigen::Vector3d n(0.267, 0.535, 0.802);
 
 	Eigen::Vector3d z(0, 0, 1);
 	Eigen::Vector3d axis = n.normalized().cross(z);
@@ -416,17 +420,17 @@ void IntersectMethod(pcl::PointCloud<pcl::PointXYZ>::Ptr sliceCloud, const pcl::
 	double dMaxDisToPlane = 2.000;  // 最大点至平面距离
 	SlicePointCloud(lpoints, rpoints, transCloud, rotatedPt[2], dMaxDisToPlane/* 8 * dDelta*/);
 
-#if ENABLE_DISPLAY
-	pcl::visualization::PCLVisualizer viewer("Viewer");
-	viewer.addPointCloud(rpoints);
-	viewer.resetCamera();
-
-	// 等待直到视图关闭
-	while (!viewer.wasStopped())
-	{
-		viewer.spinOnce(100);
-	}
-#endif
+//#if ENABLE_DISPLAY
+//	pcl::visualization::PCLVisualizer viewer("Viewer");
+//	viewer.addPointCloud(rpoints);
+//	viewer.resetCamera();
+//
+//	// 等待直到视图关闭
+//	while (!viewer.wasStopped())
+//	{
+//		viewer.spinOnce(100);
+//	}
+//#endif
 
 	// Step 3: 匹配 lpoint 和 rpoint 并计算交点
 	FindCorres(sliceCloud, lpoints, rpoints, rotatedPt[2], 2 * dDelta);
@@ -654,6 +658,51 @@ PointCloud::Ptr SortPointsUsingKDTreeEx(const PointCloud::Ptr& cloud)
 	return sortedPoints;
 }
 
+PointCloud::Ptr SortPointsUsingHull(const PointCloud::Ptr& cloud)
+{
+	// Step 1: Compute Convex Hull
+	PointCloud::Ptr convex_hull_cloud(new PointCloud());
+	pcl::ConvexHull<pcl::PointXYZ> convex_hull;
+	convex_hull.setInputCloud(cloud);
+	convex_hull.reconstruct(*convex_hull_cloud);
+
+	// Step 2: Compute Concave Hull
+	PointCloud::Ptr concave_hull_cloud(new PointCloud());
+	pcl::ConcaveHull<pcl::PointXYZ> concave_hull;
+	concave_hull.setInputCloud(cloud);
+	concave_hull.setAlpha(8.5); // Alpha value controls concavity
+	concave_hull.reconstruct(*concave_hull_cloud);
+
+	PointCloud::Ptr sortedPoints(new PointCloud);
+
+	// Add convex hull points first (they form the outer boundary)
+	for (const auto& point : convex_hull_cloud->points) {
+		sortedPoints->points.push_back(point);
+	}
+
+	// Insert concave hull points into the ordered list based on proximity to the convex hull
+	for (const auto& point : concave_hull_cloud->points) {
+		// Find the closest point in the ordered convex hull points
+		double min_distance = std::numeric_limits<double>::max();
+		size_t insert_position = 0;
+
+		for (size_t i = 0; i < sortedPoints->points.size(); ++i) {
+			double distance = std::sqrt(std::pow(point.x - sortedPoints->points[i].x, 2) +
+				std::pow(point.y - sortedPoints->points[i].y, 2) +
+				std::pow(point.z - sortedPoints->points[i].z, 2));
+			if (distance < min_distance) {
+				min_distance = distance;
+				insert_position = i;
+			}
+		}
+
+		// Insert the concave point near its closest convex point
+		sortedPoints->points.insert(sortedPoints->points.begin() + insert_position, point);
+	}
+
+	return sortedPoints;
+}
+
 void CurveReconstruct1(const PointCloud::Ptr& cloud)
 {
 	// 计算均值和标准差
@@ -682,6 +731,26 @@ void CurveReconstruct1(const PointCloud::Ptr& cloud)
 		// 进行点排序
 		auto startOp = std::chrono::high_resolution_clock::now();
 		PointCloud::Ptr sortedPoints = SortPointsUsingKDTreeEx(cloudCluster);
+		//PointCloud::Ptr sortedPoints = SortPointsUsingHull(cloudCluster);
+		// 调试用
+		/*pcl::PCDWriter writer;
+		sortedPoints->width = sortedPoints->points.size();
+		sortedPoints->height = 1;
+		sortedPoints->is_dense = false;
+		writer.write("SortedCloud.pcd", *sortedPoints, false);*/
+
+#if ENABLE_DISPLAY
+		pcl::visualization::PCLVisualizer viewerS("SortedViewer");
+		viewerS.addPointCloud(sortedPoints);
+		viewerS.resetCamera();
+
+		// 等待直到视图关闭
+		while (!viewerS.wasStopped())
+		{
+			viewerS.spinOnce(100);
+		}
+#endif
+
 		auto endOp = std::chrono::high_resolution_clock::now();
 		std::chrono::duration<double> elapsedOp = endOp - startOp;
 		std::cout << "区域生长点排序算法用时: " << elapsedOp.count() << " seconds" << std::endl;

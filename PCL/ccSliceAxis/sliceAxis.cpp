@@ -702,12 +702,36 @@ CCPolyline* ExtractFlatEnvelope(PointCloud* points,
 		cloud->points.push_back(pcl::PointXYZ(point.x, point.y, point.z));
 	}
 
-	// 使用 PCL 可视化工具显示点云
-	pcl::visualization::CloudViewer viewer("Polyline Viewer");
-	viewer.showCloud(cloud);
 
-	// 等待直到视图关闭
-	while (!viewer.wasStopped()) {}
+	// 遍历点云并顺序连接相邻的点
+	double dSamplingStep = 0.5;
+	// 创建可视化器
+	pcl::visualization::PCLVisualizer viewer("Line Viewer");
+	for (size_t i = 0; i < cloud->points.size() - 1; ++i)
+	{
+		std::string line_id = "line_" + std::to_string(i);
+		double dis = pcl::euclideanDistance(cloud->points[i], cloud->points[i + 1]);
+		if (dis > dSamplingStep * 5)
+			continue;
+
+		viewer.addLine(cloud->points[i], cloud->points[i + 1], line_id);
+	}
+	// 连接最后一个点到第一个点，形成闭环
+	//viewer.addLine(sortedPoints->points.back(), sortedPoints->points.front(), "line_close");
+	viewer.resetCamera();
+
+	// 运行可视化器
+	while (!viewer.wasStopped())
+	{
+		viewer.spinOnce();
+	}
+
+	//// 使用 PCL 可视化工具显示点云
+	//pcl::visualization::CloudViewer viewer("Polyline Viewer");
+	//viewer.showCloud(cloud);
+
+	//// 等待直到视图关闭
+	//while (!viewer.wasStopped()) {}
 // 
 	// 创建KD-Tree对象用于搜索
 	pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
@@ -717,34 +741,34 @@ CCPolyline* ExtractFlatEnvelope(PointCloud* points,
 	std::vector<pcl::PointIndices> cluster_indices;
 	pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
 	ec.setClusterTolerance(5);		// 设置近邻搜索的搜索半径
-	ec.setMinClusterSize(3);		// 设置一个聚类需要的最少点数目
-	ec.setMaxClusterSize(1000);		// 设置一个聚类需要的最大点数目
+	ec.setMinClusterSize(20);		// 设置一个聚类需要的最少点数目
+	ec.setMaxClusterSize(100000);		// 设置一个聚类需要的最大点数目
 	ec.setSearchMethod(tree);
 	ec.setInputCloud(cloud);
 	ec.extract(cluster_indices);
 
-	///////////////////////////显示1///////////////////////
-	//std::vector<pcl::PointCloud<pcl::PointXYZ>> vCloud;
-	//for (const auto& indices : cluster_indices) 
-	//{
-	//	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_cluster(new pcl::PointCloud<pcl::PointXYZ>);
-	//	for (const auto& index : indices.indices)
-	//		cloud_cluster->points.push_back(cloud->points[index]);
+	/////////////////////////显示1///////////////////////
+	std::vector<pcl::PointCloud<pcl::PointXYZ>> vCloud;
+	for (const auto& indices : cluster_indices) 
+	{
+		pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_cluster(new pcl::PointCloud<pcl::PointXYZ>);
+		for (const auto& index : indices.indices)
+			cloud_cluster->points.push_back(cloud->points[index]);
 
-	//	vCloud.emplace_back(*cloud_cluster);
+		vCloud.emplace_back(*cloud_cluster);
 
-	//	cloud_cluster->width = cloud_cluster->points.size();
-	//	cloud_cluster->height = 1;
-	//	cloud_cluster->is_dense = true;
+		cloud_cluster->width = cloud_cluster->points.size();
+		cloud_cluster->height = 1;
+		cloud_cluster->is_dense = true;
 
-	//	// 使用 PCL 可视化工具显示点云
-	//	pcl::visualization::CloudViewer viewer("Polyline Viewer");
-	//	viewer.showCloud(cloud_cluster);
+		// 使用 PCL 可视化工具显示点云
+		pcl::visualization::CloudViewer viewer("Polyline Viewer");
+		viewer.showCloud(cloud_cluster);
 
-	//	// 等待直到视图关闭
-	//	while (!viewer.wasStopped()) {}
-	//}
-	//
+		// 等待直到视图关闭
+		while (!viewer.wasStopped()) {}
+	}
+	
 	
 	 // Create a new point cloud for colored clusters
 	pcl::PointCloud<pcl::PointXYZRGB>::Ptr colored_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
