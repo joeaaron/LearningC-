@@ -136,6 +136,31 @@ namespace
 	}
 }
 
+double CalcCloudDensity(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud)
+{
+	// 创建KD-Tree对象用于搜索
+	pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
+	tree->setInputCloud(cloud);
+
+	// 计算点云密度
+	double dAvgDis = 0.0;
+	int nNum = 0;
+	for (int i = 0; i < cloud->size(); ++i)
+	{
+		std::vector<int> indiceId;
+		std::vector<float> disSquare;
+
+		if (tree->nearestKSearch(cloud->points[i], 2, indiceId, disSquare) > 0)
+		{
+			dAvgDis += sqrt(disSquare[1]);
+			nNum++;
+		}
+	}
+	dAvgDis /= nNum;
+
+	return dAvgDis;
+}
+
 //! Finds the nearest (available) point to an edge
 /** \return The nearest point distance (or -1 if no point was found!)
 **/
@@ -766,18 +791,29 @@ CCPolyline* ExtractFlatEnvelope(PointCloud* points,
 	//std::cout << "Height: " << height << std::endl;
 	//std::cout << "Depth: " << depth << std::endl;
 
-	// 使用 PCL 可视化工具显示点云
-#if ENABLE_DISPLAY
-	pcl::visualization::PCLVisualizer viewer("Polyline Viewer");
-	viewer.addPointCloud(cloud);
-	viewer.resetCamera();
-
-	// 等待直到视图关闭
-	while (!viewer.wasStopped()) 
-	{
-		viewer.spinOnce(100);
-	}
-#endif
+	// 多段线
+//#if ENABLE_DISPLAY
+//	// 遍历点云并顺序连接相邻的点
+//	double dSamplingStep = 0.5;
+//	// 创建可视化器
+//	pcl::visualization::PCLVisualizer viewer("Line Viewer");
+//	for (size_t i = 0; i < cloud->points.size() - 1; ++i)
+//	{
+//		std::string line_id = "line_" + std::to_string(i);
+//		double dis = pcl::euclideanDistance(cloud->points[i], cloud->points[i + 1]);
+//		if (dis > dSamplingStep * 4)
+//			continue;
+//
+//		viewer.addLine(cloud->points[i], cloud->points[i + 1], line_id);
+//	}
+//	viewer.resetCamera();
+//
+//	// 等待直到视图关闭
+//	while (!viewer.wasStopped()) 
+//	{
+//		viewer.spinOnce(100);
+//	}
+//#endif
 
 	double threshold = 1.5;				// 设置采样间距
 	double dAvg = 0.0;					// 平均距离
@@ -834,9 +870,11 @@ CCPolyline* ExtractFlatEnvelope(PointCloud* points,
 
 	for (const auto& indices : cluster_indices) {
 		pcl::PointCloud<pcl::PointXYZRGB>::Ptr cluster_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+		pcl::PointCloud<pcl::PointXYZ>::Ptr clusterCloud(new pcl::PointCloud<pcl::PointXYZ>);
 		cluster_cloud->width = indices.indices.size();
 		cluster_cloud->height = 1;
 		cluster_cloud->points.resize(cluster_cloud->width * cluster_cloud->height);
+		clusterCloud->points.resize(indices.indices.size());
 
 		// Assign a unique color to this cluster
 		pcl::PointXYZRGB color;
@@ -846,15 +884,46 @@ CCPolyline* ExtractFlatEnvelope(PointCloud* points,
 
 		for (size_t i = 0; i < indices.indices.size(); ++i) {
 			pcl::PointXYZRGB& pt = cluster_cloud->points[i];
-			pt.x = cloud->points[indices.indices[i]].x;
+			pcl::PointXYZ& pt2 = clusterCloud->points[i];
+			pt.x = cloud->points[indices.indices[i]].x; 
 			pt.y = cloud->points[indices.indices[i]].y;
 			pt.z = cloud->points[indices.indices[i]].z;
+			pt2.x = cloud->points[indices.indices[i]].x;
+			pt2.y = cloud->points[indices.indices[i]].y;
+			pt2.z = cloud->points[indices.indices[i]].z;
+
 			pt.r = color.r;
 			pt.g = color.g;
 			pt.b = color.b;
 		}
 
 		*colored_cloud += *cluster_cloud;
+
+		// 多段线
+#if ENABLE_DISPLAY
+		// 遍历点云并顺序连接相邻的点
+		double dSamplingStep = 0.5;
+		double dAvg = CalcCloudDensity(clusterCloud);
+
+		// 创建可视化器
+		pcl::visualization::PCLVisualizer viewer("Line Viewer");
+		for (size_t i = 0; i < cluster_cloud->points.size() - 1; ++i)
+		{
+			std::string line_id = "line_" + std::to_string(i);
+			double dis = pcl::euclideanDistance(cluster_cloud->points[i], cluster_cloud->points[i + 1]);
+			if (dis > /*dSamplingStep **/2* dAvg)
+				continue;
+
+			viewer.addLine(cluster_cloud->points[i], cluster_cloud->points[i + 1], line_id);
+		}
+		viewer.resetCamera();
+
+		// 等待直到视图关闭
+		while (!viewer.wasStopped())
+		{
+			viewer.spinOnce(100);
+		}
+#endif
 	}
 
 	// Visualize the colored point cloud
@@ -1020,25 +1089,7 @@ int main()
 		pcl::io::loadPolygonFileSTL(fnameS, mesh);
 	}
 
-	// 创建KD-Tree对象用于搜索
-	pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
-	tree->setInputCloud(pc);
-
-	// 计算点云密度
-	double dAvgDis = 0.0;
-	int nNum = 0;
-	for (int i = 0; i < pc->size(); ++i)
-	{
-		std::vector<int> indiceId;
-		std::vector<float> disSquare;
-
-		if (tree->nearestKSearch(pc->points[i], 2, indiceId, disSquare) > 0)
-		{
-			dAvgDis += sqrt(disSquare[1]);
-			nNum++;
-		}
-	}
-	dAvgDis /= nNum;
+	double dAvgDis = CalcCloudDensity(pc);
 
 	// ****************************获取包围盒内的点云******************************
 	// TEST CASE 01
@@ -1078,8 +1129,12 @@ int main()
 	//Eigen::Vector3d n(3, 2, 1 );
 
 	// TEST CASE 10
-	Eigen::Vector3d center(95.665, 72.443, -16.049);
-	Eigen::Vector3d n(10, 12, 20);
+	//Eigen::Vector3d center(95.665, 72.443, -16.049);
+	//Eigen::Vector3d n(10, 12, 20);
+
+	// TEST CASE 11
+	Eigen::Vector3d center(-95.978, 45.836, 0.005);
+	Eigen::Vector3d n(1, 3, 3);
 
 	Eigen::Vector3d z(0, 0, 1);
 	Eigen::Vector3d axis = n.normalized().cross(z);
@@ -1099,7 +1154,7 @@ int main()
 	// 得到包围盒内点云
 	Eigen::Vector4d plane = CalcPlane(rotatedPt, z);
 	pcl::PointCloud<pcl::PointXYZ>::Ptr sliceCloud(new pcl::PointCloud<pcl::PointXYZ>);
-	GetSlice(sliceCloud, rotatedCloud, plane, dAvgDis*0.5);
+	GetSlice(sliceCloud, rotatedCloud, plane, dAvgDis*0.3);
 
 	//pcl::PLYWriter writer;
 	//writer.write("slice0820.ply", *sliceCloud, false);

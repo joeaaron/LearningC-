@@ -384,16 +384,16 @@ void IntersectMethod(pcl::PointCloud<pcl::PointXYZ>::Ptr sliceCloud, const pcl::
 	//Eigen::Vector3d n(0.577, 0.577, 0.577);
 
 	// TEST CASE 02
-	//Eigen::Vector3d center(-95.978, 45.836, 0.005);
-	//Eigen::Vector3d n(1, 3, 3);
+	Eigen::Vector3d center(-95.978, 45.836, 0.005);
+	Eigen::Vector3d n(1, 3, 3);
 
 	// TEST CASE 03
 	//Eigen::Vector3d center(95.665, 72.443, -16.049);
 	//Eigen::Vector3d n(10, 12, 20);
 
 	// TEST CASE 04
-	Eigen::Vector3d center(-0.001, 33.146, -12.500);
-	Eigen::Vector3d n(0.267, 0.535, 0.802);
+	//Eigen::Vector3d center(-0.001, 33.146, -12.500);
+	//Eigen::Vector3d n(0.267, 0.535, 0.802);
 
 	Eigen::Vector3d z(0, 0, 1);
 	Eigen::Vector3d axis = n.normalized().cross(z);
@@ -461,6 +461,262 @@ std::tuple<double, double> CalAvgStd(const pcl::PointCloud<pcl::PointXYZ>::Ptr& 
 	double dStd = std::sqrt(dSqu / vDis.size() - dAvg * dAvg);
 
 	return std::make_tuple(dAvg, dStd);
+}
+
+double CalculateAngle(const pcl::PointXYZ& origin, const pcl::PointXYZ& p1, const pcl::PointXYZ& p2) 
+{
+	double angle1 = atan2(p1.y - origin.y, p1.x - origin.x);
+	double angle2 = atan2(p2.y - origin.y, p2.x - origin.x);
+	double angle = angle2 - angle1;
+
+	// 确保角度在 [0, 2 * PI] 范围内
+	if (angle < 0) angle += 2 * M_PI;
+	return angle;
+}
+
+PointT FindStartPt(const PointCloud::Ptr& cloud)
+{
+	PointT startPt = cloud->points[0];
+	for (const auto& pt : cloud->points)
+	{
+		if (pt.x < startPt.x || (pt.x == startPt.x && pt.y < startPt.y))
+		{
+			startPt = pt;
+		}
+	}
+
+	return startPt;
+}
+
+bool IsLineIntersected(const pcl::PointXYZ& p1, const pcl::PointXYZ& p2, const pcl::PointXYZ& p3, const pcl::PointXYZ& p4) 
+{
+	// 计算向量叉乘
+	auto crossProduct = [](double x1, double y1, double x2, double y2) {
+		return x1 * y2 - y1 * x2;
+		};
+
+	double v1_x = p2.x - p1.x;
+	double v1_y = p2.y - p1.y;
+	double v2_x = p4.x - p3.x;
+	double v2_y = p4.y - p3.y;
+
+	double cross1 = crossProduct(v1_x, v1_y, p3.x - p1.x, p3.y - p1.y);
+	double cross2 = crossProduct(v1_x, v1_y, p4.x - p1.x, p4.y - p1.y);
+
+	double cross3 = crossProduct(v2_x, v2_y, p1.x - p3.x, p1.y - p3.y);
+	double cross4 = crossProduct(v2_x, v2_y, p2.x - p3.x, p2.y - p3.y);
+
+	// 检查叉乘是否改变符号，判断线段是否相交
+	return (cross1 * cross2 < 0) && (cross3 * cross4 < 0);
+}
+
+bool DoLinesIntersect(const pcl::PointXYZ& p1, const pcl::PointXYZ& p2, const pcl::PointXYZ& p3, const pcl::PointXYZ& p4) {
+	auto cross = [](double x1, double y1, double x2, double y2) {
+		return x1 * y2 - y1 * x2;
+		};
+
+	double dx1 = p2.x - p1.x;
+	double dy1 = p2.y - p1.y;
+	double dx2 = p4.x - p3.x;
+	double dy2 = p4.y - p3.y;
+
+	double delta = cross(dx1, dy1, dx2, dy2);
+	if (delta == 0) {
+		return false; // 平行，不相交
+	}
+
+	double s = cross(p3.x - p1.x, p3.y - p1.y, dx2, dy2) / delta;
+	double t = cross(p3.x - p1.x, p3.y - p1.y, dx1, dy1) / delta;
+
+	return s >= 0 && s <= 1 && t >= 0 && t <= 1; // 是否在线段内相交
+}
+
+bool IsSelfIntersecting(const PointCloud::Ptr& sortedPoints, const pcl::PointXYZ& newPoint) 
+{
+	size_t last = sortedPoints->points.size() - 1;
+
+	for (size_t i = 0; i < last - 1; ++i) {
+		const pcl::PointXYZ& p1 = sortedPoints->points[i];
+		const pcl::PointXYZ& p2 = sortedPoints->points[i + 1];
+		const pcl::PointXYZ& lastPoint = sortedPoints->points[last];
+
+		// 检查新形成的线段 (lastPoint, newPoint) 是否与现有的线段 (p1, p2) 相交
+		if (DoLinesIntersect(p1, p2, lastPoint, newPoint)) {
+			return true; // 发生自交
+		}
+	}
+	return false; // 没有自交
+}
+
+// Function to calculate the angle between two vectors
+double calculateAngle(const pcl::PointXYZ& p1, const pcl::PointXYZ& p2, const pcl::PointXYZ& p3) {
+	// Calculate vectors
+	double v1_x = p2.x - p1.x;
+	double v1_y = p2.y - p1.y;
+	double v2_x = p3.x - p2.x;
+	double v2_y = p3.y - p2.y;
+
+	// Calculate angles using atan2
+	double angle1 = std::atan2(v1_y, v1_x);
+	double angle2 = std::atan2(v2_y, v2_x);
+
+	// Calculate the difference and normalize to [0, 360) degrees
+	double angle = std::fmod((angle2 - angle1) * 180.0 / M_PI + 360, 360.0);
+	if (angle > 180) angle = 360 - angle; // Convert to [0, 180]
+
+	return angle;
+}
+
+// Function to check if two line segments (p1-p2 and p3-p4) intersect
+bool segmentsIntersect(const pcl::PointXYZ& p1, const pcl::PointXYZ& p2, const pcl::PointXYZ& p3, const pcl::PointXYZ& p4) {
+	auto crossProduct = [](const pcl::PointXYZ& p, const pcl::PointXYZ& q, const pcl::PointXYZ& r) {
+		return (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x);
+		};
+
+	// Check if the line segments p1-p2 and p3-p4 intersect
+	double d1 = crossProduct(p3, p4, p1);
+	double d2 = crossProduct(p3, p4, p2);
+	double d3 = crossProduct(p1, p2, p3);
+	double d4 = crossProduct(p1, p2, p4);
+
+	// If the signs of d1 and d2 differ, and the signs of d3 and d4 differ, the segments intersect
+	if ((d1 * d2 < 0) && (d3 * d4 < 0)) {
+		return true;
+	}
+
+	return false;
+}
+
+// Function to check if adding a point will cause intersection with existing segments
+bool willCauseIntersection(const PointCloud::Ptr& ordered_points, const pcl::PointXYZ& new_point, size_t insert_position) {
+	const pcl::PointXYZ& prev_point = ordered_points->points[insert_position - 1];
+	const pcl::PointXYZ& next_point = ordered_points->points[insert_position];
+
+	// Check for intersection with other segments
+	for (size_t i = 0; i < ordered_points->points.size() - 1; ++i) {
+		const pcl::PointXYZ& p1 = ordered_points->points[i];
+		const pcl::PointXYZ& p2 = ordered_points->points[i + 1];
+
+		// Skip the segments that involve the points where we are inserting the new point
+		if ((p1.x == prev_point.x && p1.y == prev_point.y && p2.x == next_point.x && p2.y == next_point.y) ||
+			(p1.x == next_point.x && p1.y == next_point.y && p2.x == prev_point.x && p2.y == prev_point.y)) {
+			continue;
+		}
+
+		if (segmentsIntersect(p1, p2, prev_point, new_point) || segmentsIntersect(p1, p2, new_point, next_point)) {
+			return true; // Insertion would cause an intersection
+		}
+	}
+
+	return false; // No intersection detected
+}
+
+PointCloud::Ptr SortPointsUsingHull(const PointCloud::Ptr& cloud)
+{
+	// Step 1: Compute Convex Hull
+	PointCloud::Ptr convex_hull_cloud(new PointCloud());
+	pcl::ConvexHull<pcl::PointXYZ> convex_hull;
+	convex_hull.setInputCloud(cloud);
+	convex_hull.reconstruct(*convex_hull_cloud);
+
+	// Step 2: Compute Concave Hull
+	PointCloud::Ptr concave_hull_cloud(new PointCloud());
+	pcl::ConcaveHull<pcl::PointXYZ> concave_hull;
+	concave_hull.setInputCloud(cloud);
+	concave_hull.setAlpha(8.5); // Alpha value controls concavity
+	concave_hull.reconstruct(*concave_hull_cloud);
+
+	PointCloud::Ptr sortedPoints(new PointCloud);
+
+	// Add convex hull points first (they form the outer boundary)
+	for (const auto& point : convex_hull_cloud->points) {
+		sortedPoints->points.push_back(point);
+	}
+
+	// Insert concave hull points into the ordered list based on proximity to the convex hull
+	for (const auto& point : concave_hull_cloud->points) {
+		// Find the closest point in the ordered convex hull points
+		double min_distance = std::numeric_limits<double>::max();
+		size_t insert_position = 0;
+
+		for (size_t i = 0; i < sortedPoints->points.size(); ++i) {
+			double distance = std::sqrt(std::pow(point.x - sortedPoints->points[i].x, 2) +
+				std::pow(point.y - sortedPoints->points[i].y, 2) +
+				std::pow(point.z - sortedPoints->points[i].z, 2));
+			if (distance < min_distance) {
+				min_distance = distance;
+				insert_position = i;
+			}
+		}
+
+		// Insert the concave point near its closest convex point
+		sortedPoints->points.insert(sortedPoints->points.begin() + insert_position, point);
+	}
+
+	return sortedPoints;
+}
+
+PointCloud::Ptr SortPointsUsingHullEx(const PointCloud::Ptr& cloud)
+{
+	// Step 1: Compute Convex Hull
+	PointCloud::Ptr convex_hull_cloud(new PointCloud());
+	pcl::ConvexHull<pcl::PointXYZ> convex_hull;
+	convex_hull.setInputCloud(cloud);
+	convex_hull.reconstruct(*convex_hull_cloud);
+
+	// Step 2: Compute Concave Hull
+	PointCloud::Ptr concave_hull_cloud(new PointCloud());
+	pcl::ConcaveHull<pcl::PointXYZ> concave_hull;
+	concave_hull.setInputCloud(cloud);
+	concave_hull.setAlpha(8.5); // Alpha value controls concavity
+	concave_hull.reconstruct(*concave_hull_cloud);
+
+	PointCloud::Ptr sortedPoints(new PointCloud);
+	// Add convex hull points first (they form the outer boundary)
+	for (const auto& point : convex_hull_cloud->points) {
+		sortedPoints->points.push_back(point);
+	} 
+
+	// Insert concave hull points into the ordered list based on proximity and angle consistency
+	for (const auto& concave_point : concave_hull_cloud->points) 
+	{
+		double min_distance = std::numeric_limits<double>::max();
+		size_t best_insert_position = 0;
+		double best_angle_change = std::numeric_limits<double>::max();
+
+		// Find the best insert position based on proximity and minimal angle change
+		for (size_t i = 0; i < sortedPoints->points.size() - 1; ++i) {
+			const auto& prev_point = sortedPoints->points[i];
+			const auto& next_point = sortedPoints->points[i + 1];
+
+			// Compute the distance from the concave point to the segment between prev_point and next_point
+			double distance_to_segment = std::sqrt(std::pow(concave_point.x - prev_point.x, 2) +
+				std::pow(concave_point.y - prev_point.y, 2));
+
+			// Compute angle change if this point was inserted
+			double angle_change = calculateAngle(prev_point, concave_point, next_point);
+
+			// Select this position if the distance is smaller and angle change is more favorable
+			if (distance_to_segment < min_distance && angle_change < best_angle_change) {
+				min_distance = distance_to_segment;
+				best_insert_position = i + 1;
+				best_angle_change = angle_change;
+			}
+		}
+
+		// Before inserting, check for intersection
+		if (!willCauseIntersection(sortedPoints, concave_point, best_insert_position)) 
+		{
+			// Insert the concave point at the best position found
+			sortedPoints->points.insert(sortedPoints->points.begin() + best_insert_position, concave_point);
+		}
+		else 
+		{
+			std::cout << "Insertion of point at (" << concave_point.x << ", " << concave_point.y << ") would cause intersection. Skipping this point." << std::endl;
+		}
+	}
+	
+	return sortedPoints;
 }
 
 // 使用 k-d Tree 查找最近点并进行排序
@@ -548,31 +804,6 @@ PointCloud::Ptr SortPointsUsingKDTree(const PointCloud::Ptr& cloud)
 	return sortedPoints;
 }
 
-double CalculateAngle(const pcl::PointXYZ& origin, const pcl::PointXYZ& p1, const pcl::PointXYZ& p2) 
-{
-	double angle1 = atan2(p1.y - origin.y, p1.x - origin.x);
-	double angle2 = atan2(p2.y - origin.y, p2.x - origin.x);
-	double angle = angle2 - angle1;
-
-	// 确保角度在 [0, 2 * PI] 范围内
-	if (angle < 0) angle += 2 * M_PI;
-	return angle;
-}
-
-PointT FindStartPt(const PointCloud::Ptr& cloud)
-{
-	PointT startPt = cloud->points[0];
-	for (const auto& pt : cloud->points)
-	{
-		if (pt.x < startPt.x || (pt.x == startPt.x && pt.y < startPt.y))
-		{
-			startPt = pt;
-		}
-	}
-
-	return startPt;
-}
-
 PointCloud::Ptr SortPointsUsingKDTreeEx(const PointCloud::Ptr& cloud)
 {
 	// 构建 k-d Tree
@@ -619,7 +850,7 @@ PointCloud::Ptr SortPointsUsingKDTreeEx(const PointCloud::Ptr& cloud)
 			{
 				searchRadius *= 2;
 			}
-			else 
+			else
 			{
 				int bestIdx = -1;
 				double minAngle = std::numeric_limits<float>::max();
@@ -627,10 +858,10 @@ PointCloud::Ptr SortPointsUsingKDTreeEx(const PointCloud::Ptr& cloud)
 				for (int j = 0; j < pointIdxRadiusSearch.size(); ++j)
 				{
 					int idx = pointIdxRadiusSearch[j];
-					if (!used[idx]) 
+					if (!used[idx])
 					{
 						double angle = CalculateAngle(previousPoint, currentPoint, cloud->points[idx]);
-						if (angle < minAngle) 
+						if (angle < minAngle)   // 角度变化最小 
 						{
 							minAngle = angle;
 							bestIdx = idx;
@@ -647,7 +878,7 @@ PointCloud::Ptr SortPointsUsingKDTreeEx(const PointCloud::Ptr& cloud)
 					currentPoint = nextPoint;
 					foundValidPoint = true;
 				}
-				else 
+				else
 				{
 					searchRadius *= 2;  // 动态调整半径
 				}
@@ -658,46 +889,101 @@ PointCloud::Ptr SortPointsUsingKDTreeEx(const PointCloud::Ptr& cloud)
 	return sortedPoints;
 }
 
-PointCloud::Ptr SortPointsUsingHull(const PointCloud::Ptr& cloud)
+PointCloud::Ptr SortPointsUsingSelfIntersect(const PointCloud::Ptr& cloud)
 {
-	// Step 1: Compute Convex Hull
-	PointCloud::Ptr convex_hull_cloud(new PointCloud());
-	pcl::ConvexHull<pcl::PointXYZ> convex_hull;
-	convex_hull.setInputCloud(cloud);
-	convex_hull.reconstruct(*convex_hull_cloud);
+	// 构建 k-d Tree
+	pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
+	kdtree.setInputCloud(cloud);
 
-	// Step 2: Compute Concave Hull
-	PointCloud::Ptr concave_hull_cloud(new PointCloud());
-	pcl::ConcaveHull<pcl::PointXYZ> concave_hull;
-	concave_hull.setInputCloud(cloud);
-	concave_hull.setAlpha(8.5); // Alpha value controls concavity
-	concave_hull.reconstruct(*concave_hull_cloud);
+	// 计算点云密度
+	double dAvgDis = 0.0;
+	int nNum = 0;
+	for (int i = 0; i < cloud->size(); ++i) {
+		std::vector<int> indiceId;
+		std::vector<float> disSquare;
 
+		if (kdtree.nearestKSearch(cloud->points[i], 2, indiceId, disSquare) > 0) {
+			dAvgDis += sqrt(disSquare[1]);
+			nNum++;
+		}
+	}
+	dAvgDis /= nNum;
+
+	// 结果点集
 	PointCloud::Ptr sortedPoints(new PointCloud);
 
-	// Add convex hull points first (they form the outer boundary)
-	for (const auto& point : convex_hull_cloud->points) {
-		sortedPoints->points.push_back(point);
-	}
+	// 选择起始点，例如选择最左下角的点
+	pcl::PointXYZ startPoint = FindStartPt(cloud);    // cloud->points[0];  假设选择第一个点作为起始点
+	sortedPoints->points.push_back(startPoint);
 
-	// Insert concave hull points into the ordered list based on proximity to the convex hull
-	for (const auto& point : concave_hull_cloud->points) {
-		// Find the closest point in the ordered convex hull points
-		double min_distance = std::numeric_limits<double>::max();
-		size_t insert_position = 0;
+	std::vector<bool> used(cloud->points.size(), false);
+	used[0] = true;
 
-		for (size_t i = 0; i < sortedPoints->points.size(); ++i) {
-			double distance = std::sqrt(std::pow(point.x - sortedPoints->points[i].x, 2) +
-				std::pow(point.y - sortedPoints->points[i].y, 2) +
-				std::pow(point.z - sortedPoints->points[i].z, 2));
-			if (distance < min_distance) {
-				min_distance = distance;
-				insert_position = i;
+	pcl::PointXYZ currentPoint = startPoint;
+	pcl::PointXYZ previousPoint = startPoint;  // 用于计算方向
+
+	for (size_t i = 1; i < cloud->points.size(); ++i) 
+	{
+		float searchRadius = dAvgDis;
+		bool foundValidPoint = false;
+
+		while (!foundValidPoint) 
+		{
+			std::vector<int> pointIdxRadiusSearch;
+			std::vector<float> pointRadiusSquaredDistance;
+
+			// kd-tree 半径搜索，控制搜索范围
+			if (kdtree.radiusSearch(currentPoint, searchRadius, pointIdxRadiusSearch, pointRadiusSquaredDistance) <= 0)
+			{
+				searchRadius *= 2;
+			}
+			else
+			{
+				std::vector<std::pair<double, int>> anglePointPairs;
+
+				for (int j = 0; j < pointIdxRadiusSearch.size(); ++j)
+				{
+					int idx = pointIdxRadiusSearch[j];
+					if (!used[idx])
+					{
+						double angle = CalculateAngle(previousPoint, currentPoint, cloud->points[idx]);
+						anglePointPairs.emplace_back(angle, idx);
+					}
+				}
+
+				// Sort pairs by angle
+				std::sort(anglePointPairs.begin(), anglePointPairs.end());
+
+				// Find the best non-intersecting point
+				for (const auto& pair : anglePointPairs) {
+					int idx = pair.second;
+					pcl::PointXYZ nextPoint = cloud->points[idx];
+
+					if (sortedPoints->points.size() <= 1)
+					{
+						sortedPoints->points.push_back(nextPoint);
+						used[idx] = true;
+						previousPoint = currentPoint;
+						currentPoint = nextPoint;
+						foundValidPoint = true;
+						break;
+					}
+
+					if (!IsSelfIntersecting(sortedPoints, nextPoint)) {
+						sortedPoints->points.push_back(nextPoint);
+						used[idx] = true;
+						previousPoint = currentPoint;
+						currentPoint = nextPoint;
+						foundValidPoint = true;
+						break;
+					}
+				}
+
+				if (!foundValidPoint) {
+					searchRadius *= 2;  // Increase radius if no valid point is found
+				}
 			}
 		}
-
-		// Insert the concave point near its closest convex point
-		sortedPoints->points.insert(sortedPoints->points.begin() + insert_position, point);
 	}
 
 	return sortedPoints;
@@ -714,7 +1000,7 @@ void CurveReconstruct1(const PointCloud::Ptr& cloud)
 
 	std::vector<pcl::PointIndices> clusterIndices;
 	pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
-	ec.setClusterTolerance(mean + stddev);				// 设置近邻搜索的搜索半径
+	ec.setClusterTolerance(mean);				// 设置近邻搜索的搜索半径
 	ec.setMinClusterSize(3);							// 设置一个聚类需要的最少点数目
 	ec.setMaxClusterSize(100000);						// 设置一个聚类需要的最大点数目
 	ec.setSearchMethod(tree);
@@ -730,8 +1016,11 @@ void CurveReconstruct1(const PointCloud::Ptr& cloud)
 
 		// 进行点排序
 		auto startOp = std::chrono::high_resolution_clock::now();
-		PointCloud::Ptr sortedPoints = SortPointsUsingKDTreeEx(cloudCluster);
-		//PointCloud::Ptr sortedPoints = SortPointsUsingHull(cloudCluster);
+		//PointCloud::Ptr sortedPoints = SortPointsUsingKDTreeEx(cloudCluster);
+		PointCloud::Ptr sortedPoints = SortPointsUsingHull(cloudCluster);
+		//PointCloud::Ptr sortedPoints = SortPointsUsingHullEx(cloudCluster);
+		//PointCloud::Ptr sortedPoints = SortPointsUsingSelfIntersect(cloudCluster);
+
 		// 调试用
 		/*pcl::PCDWriter writer;
 		sortedPoints->width = sortedPoints->points.size();
@@ -770,7 +1059,10 @@ void CurveReconstruct1(const PointCloud::Ptr& cloud)
 			viewer.addLine(sortedPoints->points[i], sortedPoints->points[i + 1], line_id);
 		}
 		// 连接最后一个点到第一个点，形成闭环
-		//viewer.addLine(sortedPoints->points.back(), sortedPoints->points.front(), "line_close");
+		double dis = pcl::euclideanDistance(sortedPoints->points.back(), sortedPoints->points.front());
+		if (dis <= dSamplingStep * mean)
+			viewer.addLine(sortedPoints->points.back(), sortedPoints->points.front(), "line_close");
+
 		viewer.resetCamera();
 
 		// 运行可视化器
@@ -863,6 +1155,7 @@ int main(int argc, char** argv)
 	}
 	cout << "Points num = " << cloud->points.size() << std::endl;
 	auto startOp = std::chrono::high_resolution_clock::now();
+
 	// 投影法
 	//ProjMethod(cloud);
 

@@ -711,7 +711,7 @@ CCPolyline* ExtractFlatEnvelope(PointCloud* points,
 	{
 		std::string line_id = "line_" + std::to_string(i);
 		double dis = pcl::euclideanDistance(cloud->points[i], cloud->points[i + 1]);
-		if (dis > dSamplingStep * 5)
+		if (dis > dSamplingStep * 9)
 			continue;
 
 		viewer.addLine(cloud->points[i], cloud->points[i + 1], line_id);
@@ -732,7 +732,7 @@ CCPolyline* ExtractFlatEnvelope(PointCloud* points,
 
 	//// 等待直到视图关闭
 	//while (!viewer.wasStopped()) {}
-// 
+
 	// 创建KD-Tree对象用于搜索
 	pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
 	tree->setInputCloud(cloud);
@@ -975,21 +975,21 @@ int main()
 	//Eigen::Vector3d center(-4.349, 0, -12.500);   //(88.328, 0.000, 4.938) | (-4.349, 0, -12.500);  testcase1 | PMT
 	//Eigen::Vector3d center(0, 0, -12.500);
 	// X轴
-	//Eigen::Vector3d center(1.321, 0, -12.500);
-	//Eigen::Vector3d normal(1, 0, 0);
+	Eigen::Vector3d center(1.321, 0, -12.500);
+	Eigen::Vector3d normal(1, 0, 0);
 
 	// Z轴
-	Eigen::Vector3d center(-0.001, 0, -17.7557755/* -13.305*/);
+	//Eigen::Vector3d center(-0.001, 0, -17.7557755/* -13.305*/);
 	//Eigen::Vector3d normal(0, 0, 1);
 
 	//Eigen::Vector3d center(-0.001, 0, -18.660); 
 	//Eigen::Vector3d center(377.767, -409.888, 395.581);
-	Eigen::Vector3d normal(0, 0, 1);
+	//Eigen::Vector3d normal(0, 0, 1);
 
 	Eigen::Vector4d plane = CalcPlane(center, normal);
 
 	pcl::PointCloud<pcl::PointXYZ>::Ptr sliceCloud(new pcl::PointCloud<pcl::PointXYZ>);
-	GetSlice(sliceCloud, pc, plane, dAvgDis * 0.5);
+	GetSlice(sliceCloud, pc, plane, 2);
 
 	// 调试用
 	pcl::PCDWriter writer;
