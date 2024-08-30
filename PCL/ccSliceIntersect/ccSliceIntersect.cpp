@@ -30,7 +30,13 @@
 
 #define ENABLE_DISPLAY 1		// 定义一个宏，用于控制显示状态
 
-typedef std::pair<pcl::PointXYZ, pcl::PointXYZ> LineSegment;
+struct LineSegment {
+	Eigen::Vector2d p1, p2;
+
+	LineSegment(const Eigen::Vector2d& _p1, const Eigen::Vector2d& _p2) : p1(_p1), p2(_p2) {}
+};
+
+typedef std::pair<pcl::PointXYZ, pcl::PointXYZ> LineSegment1;
 
 using PointT = pcl::PointXYZ;
 using PointCloud = pcl::PointCloud<PointT>;
@@ -40,6 +46,8 @@ using CCPolyline = CCCoreLib::Polyline;
 using Vertex2D = CCCoreLib::PointProjectionTools::IndexedCCVector2;
 using Hull2D = std::list<Vertex2D*>;
 using VertexIterator = std::list<Vertex2D*>::iterator;
+
+std::vector<LineSegment> connectedSegments;  // 用于存储已连接的线段
 
 //list of already used point to avoid hull's inner loops
 enum HullPointFlags {
@@ -51,6 +59,19 @@ enum HullPointFlags {
 
 namespace
 {
+	// 定义边
+	struct PolyEdge
+	{
+		PolyEdge(const Eigen::Vector2d& A, const Eigen::Vector2d& B)
+		{
+			pt1 = A;
+			pt2 = B;
+		}
+
+		Eigen::Vector2d pt1;
+		Eigen::Vector2d pt2;
+	};
+
 	struct Edge
 	{
 		Edge() : nearestPointIndex(0), nearestPointSquareDist(-1.0f) {}
@@ -876,18 +897,17 @@ void SortPointsUsingKDTree(PointCloud::Ptr sortedPoints, const PointCloud::Ptr& 
 			}
 		}
 	}
-
-#if ENABLE_DISPLAY
-	pcl::visualization::PCLVisualizer viewer("SortedViewer");
-	viewer.addPointCloud(sortedPoints);
-	viewer.resetCamera();
-
-	// 等待直到视图关闭
-	while (!viewer.wasStopped())
-	{
-		viewer.spinOnce(100);
-	}
-#endif
+//#if ENABLE_DISPLAY
+//	pcl::visualization::PCLVisualizer viewer("SortedViewer");
+//	viewer.addPointCloud(sortedPoints);
+//	viewer.resetCamera();
+//
+//	// 等待直到视图关闭
+//	while (!viewer.wasStopped())
+//	{
+//		viewer.spinOnce(100);
+//	}
+//#endif
 }
 
 double CalculateAngle(const pcl::PointXYZ& origin, const pcl::PointXYZ& p1, const pcl::PointXYZ& p2)
@@ -980,6 +1000,18 @@ void SortPointsUsingKDTreeEx(PointCloud::Ptr sortedPoints, const PointCloud::Ptr
 			}
 		}
 	}
+
+#if ENABLE_DISPLAY
+	pcl::visualization::PCLVisualizer viewer("SortedViewer");
+	viewer.addPointCloud(sortedPoints);
+	viewer.resetCamera();
+
+	// 等待直到视图关闭
+	while (!viewer.wasStopped())
+	{
+		viewer.spinOnce(100);
+	}
+#endif
 }
 
 // 计算向量叉积
@@ -993,7 +1025,7 @@ bool isBetween(float v, float min, float max) {
 }
 
 // 判断两条线段是否相交
-bool doLineSegmentsIntersect(const LineSegment& seg1, const LineSegment& seg2) {
+bool doLineSegmentsIntersect(const LineSegment1& seg1, const LineSegment1& seg2) {
 	const pcl::PointXYZ& p1 = seg1.first;
 	const pcl::PointXYZ& p2 = seg1.second;
 	const pcl::PointXYZ& p3 = seg2.first;
@@ -1082,8 +1114,6 @@ void SortPointsUsingKDTreeIntersect(PointCloud::Ptr sortedPoints, const PointClo
 	used[0] = true;
 
 	pcl::PointXYZ currentPoint = startPoint;
-	std::vector<LineSegment> sortedLineSegments;
-
 	for (size_t i = 1; i < cloud->points.size(); ++i)
 	{
 		float searchRadius = dAvgDis;						//0.1f：搜索半径，可根据点云密度调整
@@ -1181,6 +1211,103 @@ std::tuple<double, double> CalAvgStd(const pcl::PointCloud<pcl::PointXYZ>::Ptr& 
 	return std::make_tuple(dAvg, dStd);
 }
 
+Eigen::Vector2d CrossPos(PolyEdge p1, PolyEdge p2)
+{
+	Eigen::Vector2d A = p1.pt1;
+	Eigen::Vector2d B = p1.pt2;
+	Eigen::Vector2d C = p2.pt1;
+	Eigen::Vector2d D = p2.pt2;
+
+	// Compute direction vectors
+	Eigen::Vector2d AB = B - A;
+	Eigen::Vector2d CD = D - C;
+	Eigen::Vector2d AC = C - A;
+
+	// Compute the determinant
+	double denom = AB.x() * CD.y() - AB.y() * CD.x();
+
+	// Initialize a default return value (optional, could be any value indicating failure)
+	Eigen::Vector2d result(std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::quiet_NaN());
+
+	// Check if lines are parallel
+	if (denom == 0) {
+		// Lines are parallel, return a default value or handle error as appropriate
+		return result;
+	}
+
+	// Compute intersection point parameters
+	double t = (AC.x() * CD.y() - AC.y() * CD.x()) / denom;
+	double u = (AC.x() * AB.y() - AC.y() * AB.x()) / denom;
+
+	// Check if the intersection point is within the bounds of the segments
+	if (t >= 0 && t <= 1 && u >= 0 && u <= 1)
+	{
+		result = A + t * AB;
+	}
+
+	// Else, 'result' will contain the default error value
+	return result;
+}
+
+// 判断点是否在线段内，意思就是判断点是否在矩形框内
+bool JudgeInLine(Eigen::Vector2d pos, PolyEdge edge)
+{
+	int maxX = edge.pt1.x() >= edge.pt2.x() ? edge.pt1.x() : edge.pt2.x();
+	int minX = edge.pt1.x() <= edge.pt2.x() ? edge.pt1.x() : edge.pt2.x();
+	int maxY = edge.pt1.y() >= edge.pt2.y() ? edge.pt1.y() : edge.pt2.y();
+	int minY = edge.pt1.y() <= edge.pt2.y() ? edge.pt1.y() : edge.pt2.y();
+	if (pos.x() <= maxX && pos.x() >= minX && pos.y() <= maxY && pos.y() >= minY) {
+		return true;
+	}
+	return false;
+}
+
+bool IsSelfIntersect(const std::vector<PolyEdge>& poly)
+{
+	/*判断自交*/
+	Eigen::Vector2d interPos;
+	if (poly.size() > 3)
+	{
+		for (int i = 0; i < poly.size(); i++)
+		{
+			interPos = CrossPos(poly[i], poly[(i + 2) % poly.size()]);  // 相交后判断点是否在矩形范围内
+			if (JudgeInLine(interPos, poly[i]) &&
+				JudgeInLine(interPos, poly[(i + 2) % poly.size()]))
+			{
+				cout << "该多边形为自相交多边形" << endl;
+				return false;
+			}
+		}
+	}
+
+	return true;
+}
+
+// 叉积计算
+double Cross(const Eigen::Vector2d& v1, const Eigen::Vector2d& v2) {
+	return v1.x() * v2.y() - v1.y() * v2.x();
+}
+
+// 检查两条线段是否相交
+bool DoIntersect(const LineSegment& seg1, const LineSegment& seg2)
+{
+	Eigen::Vector2d pq = seg1.p2 - seg1.p1;
+	Eigen::Vector2d pr = seg2.p1 - seg1.p1;
+	Eigen::Vector2d ps = seg2.p2 - seg1.p1;
+
+	double d1 = Cross(pq, pr);
+	double d2 = Cross(pq, ps);
+
+	Eigen::Vector2d rs = seg2.p2 - seg2.p1;
+	Eigen::Vector2d rp = seg1.p1 - seg2.p1;
+	Eigen::Vector2d rq = seg1.p2 - seg2.p1;
+
+	double d3 = Cross(rs, rp);
+	double d4 = Cross(rs, rq);
+
+	return (d1 * d2 < 0) && (d3 * d4 < 0);
+}
+
 void CurveReconstruct1(const PointCloud::Ptr& cloud)
 {
 	// 计算均值和标准差
@@ -1219,11 +1346,36 @@ void CurveReconstruct1(const PointCloud::Ptr& cloud)
 
 		// 遍历点云并顺序连接相邻的点
 		double dSamplingStep = 0.5;
+		std::vector<LineSegment> convexHullEdges;
+		convexHullEdges.emplace_back(Eigen::Vector2d(sortdCloud->points[0].x, sortdCloud->points[0].y), Eigen::Vector2d(sortdCloud->points[1].x, sortdCloud->points[1].y));
 		for (size_t i = 0; i < sortdCloud->points.size() - 1; ++i)
 		{
 			std::string line_id = "line_" + std::to_string(i);
+			// 新边
+			Eigen::Vector2d newPoint(sortdCloud->points[i].x, sortdCloud->points[i].y);
+			LineSegment newEdge(convexHullEdges.back().p2, newPoint);
+
+			// 检测新边与已有边集是否相交（跳过相邻边）
+			bool isIntersecting = false;
+			for (size_t j = 0; j < convexHullEdges.size() - 1; ++j)
+			{
+				// 检测当前边是否相邻
+				if (convexHullEdges[j].p2 == newEdge.p1 || convexHullEdges[j].p1 == newEdge.p2) {
+					continue; // 跳过相邻边
+				}
+				if (DoIntersect(newEdge, convexHullEdges[j])) {
+					isIntersecting = true;
+					break;
+				}
+			}
+
+			if (!isIntersecting)
+			{
+				convexHullEdges.push_back(newEdge);
+			}
+
 			double dis = pcl::euclideanDistance(sortdCloud->points[i], sortdCloud->points[i + 1]);
-			if (dis > dSamplingStep * mean)
+			if ((dis > dSamplingStep * mean) /*|| isIntersecting*/) // 加入自相交判断
 				continue;
 
 			viewer.addLine(sortdCloud->points[i], sortdCloud->points[i + 1], line_id);
@@ -1304,6 +1456,194 @@ void CurveReconstruct2(const PointCloud::Ptr& cloud)
 	}
 }
 
+// 计算两条线段之间的夹角（单位：弧度）
+double calAngle(const Eigen::Vector2d& v1, const Eigen::Vector2d& v2) {
+	double cosTheta = v1.dot(v2) / (v1.norm() * v2.norm());
+	cosTheta = std::min(1.0, std::max(-1.0, cosTheta));  // 防止浮点误差
+	return acos(cosTheta);
+}
+
+bool IsAcuteAngle(const Eigen::Vector2d& p1, const Eigen::Vector2d& p2, double angleThreshold) {
+	Eigen::Vector2d newVector = p2 - p1;
+
+	for (const auto& segment : connectedSegments) {
+		Eigen::Vector2d existingVector;
+
+		if (segment.p1 == p1) {
+			existingVector = segment.p2 - segment.p1;
+		}
+		else if (segment.p2 == p1) {
+			existingVector = segment.p1 - segment.p2;
+		}
+		else {
+			continue;  // 如果线段没有相同端点，跳过
+		}
+
+		double angle = calAngle(newVector, existingVector);
+		if (angle < angleThreshold) {
+			return true;  // 如果夹角小于阈值，则认为是锐角
+		}
+	}
+
+	return false;  // 没有找到锐角
+}
+
+// 聚类后分别凸包，然后多义线连接
+void CurveReconstruct3(const PointCloud::Ptr& cloud)
+{
+	// 计算均值和标准差
+	const auto& [mean, stddev] = CalAvgStd(cloud);
+
+	pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
+	tree->setInputCloud(cloud);
+
+	std::vector<pcl::PointIndices> cluster_indices;
+	pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
+	ec.setClusterTolerance(2.5);
+	ec.setMinClusterSize(3);
+	ec.setMaxClusterSize(10000);
+	ec.setSearchMethod(tree);
+	ec.setInputCloud(cloud);
+	ec.extract(cluster_indices);
+
+	// Create a new point cloud for colored clusters
+	pcl::PointCloud<pcl::PointXYZRGB>::Ptr colored_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+	colored_cloud->header = cloud->header;
+	colored_cloud->width = cloud->width;
+	colored_cloud->height = cloud->height;
+	colored_cloud->is_dense = cloud->is_dense;
+
+	std::vector<pcl::PointCloud<pcl::PointXYZ>::Ptr> vSortedCloud;
+	for (const auto& indices : cluster_indices) {
+		pcl::PointCloud<pcl::PointXYZRGB>::Ptr cluster_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+		pcl::PointCloud<pcl::PointXYZ>::Ptr clusterCloud(new pcl::PointCloud<pcl::PointXYZ>);
+		cluster_cloud->width = indices.indices.size();
+		cluster_cloud->height = 1;
+		cluster_cloud->points.resize(cluster_cloud->width * cluster_cloud->height);
+		clusterCloud->points.resize(indices.indices.size());
+
+		// Assign a unique color to this cluster
+		pcl::PointXYZRGB color;
+		color.r = (rand() % 256);
+		color.g = (rand() % 256);
+		color.b = (rand() % 256);
+
+		for (size_t i = 0; i < indices.indices.size(); ++i) {
+			pcl::PointXYZRGB& pt = cluster_cloud->points[i];
+			pcl::PointXYZ& pt2 = clusterCloud->points[i];
+			pt.x = cloud->points[indices.indices[i]].x;
+			pt.y = cloud->points[indices.indices[i]].y;
+			pt.z = cloud->points[indices.indices[i]].z;
+			pt2.x = cloud->points[indices.indices[i]].x;
+			pt2.y = cloud->points[indices.indices[i]].y;
+			pt2.z = cloud->points[indices.indices[i]].z;
+
+			pt.r = color.r;
+			pt.g = color.g;
+			pt.b = color.b;
+		}
+
+		*colored_cloud += *cluster_cloud;
+
+		PointCloud::Ptr sortdCloud(new PointCloud);
+		//SortPointsUsingKDTree(sortdCloud, clusterCloud);
+		if (clusterCloud->points.size() <= 8)
+		{
+			SortPointsUsingKDTree(sortdCloud, clusterCloud);
+		}
+		else
+		{
+			// Compute Convex Hull
+			//PointCloud::Ptr convex_hull_cloud(new PointCloud());
+			//pcl::ConvexHull<pcl::PointXYZ> convex_hull;
+			//convex_hull.setInputCloud(clusterCloud);
+			//convex_hull.reconstruct(*sortdCloud);
+
+			// Compute Concave Hull
+			pcl::ConcaveHull<pcl::PointXYZ> concave_hull;
+			concave_hull.setInputCloud(clusterCloud);
+			concave_hull.setAlpha(8.5); // Alpha value controls concavity
+			concave_hull.reconstruct(*sortdCloud);
+
+			// 保存切片点云
+			//pcl::PCDWriter writer;
+			//writer.write<pcl::PointXYZ>("SortCloud1.pcd", *sortdCloud);
+
+		}
+
+		vSortedCloud.emplace_back(sortdCloud);
+
+		int m = 0;
+//#if ENABLE_DISPLAY
+//		pcl::visualization::PCLVisualizer viewer("Line Viewer");
+//		std::vector<LineSegment> convexHullEdges;
+//		for (size_t i = 0; i < sortdCloud->points.size() - 1; ++i)
+//		{
+//			std::string line_id = "line_" + std::to_string(i) + "_" + std::to_string(m);
+//			//if (sortdCloud->points.size() == 2)
+//			//{
+//			//	viewer.addLine(sortdCloud->points[i], sortdCloud->points[i + 1], line_id);
+//			//}
+//			double dis = pcl::euclideanDistance(sortdCloud->points[i], sortdCloud->points[i + 1]);
+//			if ((dis > 0.5 * stddev))
+//				continue;
+//
+//			viewer.addLine(sortdCloud->points[i], sortdCloud->points[i + 1], line_id);
+//			m++;
+//		}
+//		
+//		viewer.addPointCloud<pcl::PointXYZ>(sortdCloud, "hullcloud");
+//		viewer.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 5, "hullcloud");
+//		viewer.resetCamera();
+//
+//		while (!viewer.wasStopped()) {
+//			viewer.spinOnce(100);
+//		}
+//#endif
+
+	}
+
+#if ENABLE_DISPLAY
+	pcl::visualization::PCLVisualizer viewer("Cluster Viewer");
+
+	for (int i = 0; i < vSortedCloud.size(); ++i)
+	{
+		// 计算均值和标准差
+		const auto& [mean, stddev] = CalAvgStd(vSortedCloud[i]);
+
+		for (size_t j = 0; j < vSortedCloud[i]->points.size() - 1; ++j)
+		{
+			std::string line_id = "line_" + std::to_string(i) + "_" + std::to_string(j);
+			//if (vSortedCloud[i]->points.size() == 2)
+			//{
+			//	viewer.addLine(vSortedCloud[i]->points[j], vSortedCloud[i]->points[j + 1], line_id);
+			//}
+			double dis = pcl::euclideanDistance(vSortedCloud[i]->points[j], vSortedCloud[i]->points[j + 1]);
+			if ((dis > 0.5 * mean))
+				continue;
+
+			Eigen::Vector2d p1(vSortedCloud[i]->points[j].x, vSortedCloud[i]->points[j].y);
+			Eigen::Vector2d p2(vSortedCloud[i]->points[j + 1].x, vSortedCloud[i]->points[j + 1].y);
+
+			// 检查是否存在锐角
+			if (IsAcuteAngle(p1, p2, M_PI / 10)) {  // 10度 = PI/18 弧度
+				continue;  // 如果是锐角，不添加线段
+			}
+
+			viewer.addLine(vSortedCloud[i]->points[j], vSortedCloud[i]->points[j + 1], line_id);
+			connectedSegments.push_back(LineSegment{ p1, p2 });
+		}
+	}
+	
+	//viewer.addPointCloud<pcl::PointXYZRGB>(colored_cloud, "colored_cloud");
+	viewer.resetCamera();
+
+	while (!viewer.wasStopped()) {
+		viewer.spinOnce(100);
+	}
+#endif
+}
+
 int main(int argc, char** argv)
 {
 	PointCloud::Ptr cloud(new PointCloud);
@@ -1320,8 +1660,11 @@ int main(int argc, char** argv)
 	
 	// 相交法得到切片点云
 	IntersectMethod(sliceCloud, cloud);	
+
 	// 多义线连接
-	CurveReconstruct1(sliceCloud);				
+	//CurveReconstruct1(sliceCloud);				
+
+	CurveReconstruct3(sliceCloud);
 
 	return 0;
 }

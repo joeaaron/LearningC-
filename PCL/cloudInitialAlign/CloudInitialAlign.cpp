@@ -389,7 +389,7 @@ int
 main(int argc, char** argv)
 {
 	pcl::PolygonMesh mesh;
-	if (pcl::io::loadPolygonFileSTL("model.stl", mesh) == -1)		// model.stl Prismatic002.stl cad.stl Testcase01.stl 
+	if (pcl::io::loadPolygonFileSTL("model1.stl", mesh) == -1)		// model.stl Prismatic002.stl cad.stl Testcase01.stl 
 	{
 		PCL_ERROR("STL∂¡»° ß∞‹ \n");
 		return (-1);
@@ -397,9 +397,17 @@ main(int argc, char** argv)
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloudModel(new pcl::PointCloud<pcl::PointXYZ>);
 	Mesh2CloudPCL(*cloudModel, mesh);
 
+	////Load source
+	//pcl::PointCloud<pcl::PointXYZ>::Ptr cloudModel(new pcl::PointCloud<pcl::PointXYZ>);
+	//if (pcl::io::loadPCDFile<pcl::PointXYZ>("source2.pcd", *cloudModel) == -1)   // scene.pcd
+	//{
+	//	PCL_ERROR("Couldn't read file\n");
+	//	return (-1);
+	//}
+
 	//Load scene
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloudScene(new pcl::PointCloud<pcl::PointXYZ>);
-	if (pcl::io::loadPCDFile<pcl::PointXYZ>("scene.pcd", *cloudScene) == -1)   // scene.pcd
+	if (pcl::io::loadPCDFile<pcl::PointXYZ>("scene2.pcd", *cloudScene) == -1)   // scene.pcd
 	{
 		PCL_ERROR("Couldn't read file\n");
 		return (-1);
@@ -424,15 +432,15 @@ main(int argc, char** argv)
 	//pcl::PointCloud<pcl::PointXYZ>::Ptr cloudSceneFiltered(new pcl::PointCloud<pcl::PointXYZ>);
 	//pcl::copyPointCloud(*cloudScene, indices2, *cloudSceneFiltered);
 	//-----------------------------------------
-	pcl::VoxelGrid<pcl::PointXYZ> vg;
-	vg.setLeafSize(LEAF_SIZE, LEAF_SIZE, LEAF_SIZE);
-	vg.setDownsampleAllData(false);
+	//pcl::VoxelGrid<pcl::PointXYZ> vg;
+	//vg.setLeafSize(LEAF_SIZE, LEAF_SIZE, LEAF_SIZE);
+	//vg.setDownsampleAllData(false);
 
-	vg.setInputCloud(cloudModel);
-	vg.filter(*cloudModel);
+	//vg.setInputCloud(cloudModel);
+	//vg.filter(*cloudModel);
 
-	vg.setInputCloud(cloudScene);
-	vg.filter(*cloudScene);
+	//vg.setInputCloud(cloudScene);
+	//vg.filter(*cloudScene);
 
 	ComputePCA(cloudModel, cloudScene, cru_correspondences);
 	//ComputeFPFH(cloudModel, cloudScene, cru_correspondences);

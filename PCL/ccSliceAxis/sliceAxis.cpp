@@ -718,6 +718,7 @@ CCPolyline* ExtractFlatEnvelope(PointCloud* points,
 	}
 	// 连接最后一个点到第一个点，形成闭环
 	//viewer.addLine(sortedPoints->points.back(), sortedPoints->points.front(), "line_close");
+	viewer.addPointCloud(cloud);
 	viewer.resetCamera();
 
 	// 运行可视化器
@@ -726,9 +727,9 @@ CCPolyline* ExtractFlatEnvelope(PointCloud* points,
 		viewer.spinOnce();
 	}
 
-	//// 使用 PCL 可视化工具显示点云
+	// 使用 PCL 可视化工具显示点云
 	//pcl::visualization::CloudViewer viewer("Polyline Viewer");
-	//viewer.showCloud(cloud);
+	
 
 	//// 等待直到视图关闭
 	//while (!viewer.wasStopped()) {}
@@ -975,12 +976,12 @@ int main()
 	//Eigen::Vector3d center(-4.349, 0, -12.500);   //(88.328, 0.000, 4.938) | (-4.349, 0, -12.500);  testcase1 | PMT
 	//Eigen::Vector3d center(0, 0, -12.500);
 	// X轴
-	Eigen::Vector3d center(1.321, 0, -12.500);
-	Eigen::Vector3d normal(1, 0, 0);
+	//Eigen::Vector3d center(1.321, 0, -12.500);
+	//Eigen::Vector3d normal(1, 0, 0);
 
 	// Z轴
-	//Eigen::Vector3d center(-0.001, 0, -17.7557755/* -13.305*/);
-	//Eigen::Vector3d normal(0, 0, 1);
+	Eigen::Vector3d center(-0.001, 0, -17.7557755/* -13.305*/);
+	Eigen::Vector3d normal(0, 0, 1);
 
 	//Eigen::Vector3d center(-0.001, 0, -18.660); 
 	//Eigen::Vector3d center(377.767, -409.888, 395.581);
@@ -989,7 +990,7 @@ int main()
 	Eigen::Vector4d plane = CalcPlane(center, normal);
 
 	pcl::PointCloud<pcl::PointXYZ>::Ptr sliceCloud(new pcl::PointCloud<pcl::PointXYZ>);
-	GetSlice(sliceCloud, pc, plane, 2);
+	GetSlice(sliceCloud, pc, plane, 0.21);
 
 	// 调试用
 	pcl::PCDWriter writer;
