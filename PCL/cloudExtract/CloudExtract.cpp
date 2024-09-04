@@ -78,7 +78,7 @@ int main(int argc, char** argv)
 {
 	// 1. 读取点云数据
 	pcl::PointCloud<PointT>::Ptr cloud(new pcl::PointCloud<PointT>);
-	if (pcl::io::loadPCDFile<PointT>("cube2.pcd", *cloud) == -1) {
+	if (pcl::io::loadPCDFile<PointT>("cube3.pcd", *cloud) == -1) {
 		PCL_ERROR("Couldn't read file input.pcd \n");
 		return -1;
 	}
@@ -106,24 +106,24 @@ int main(int argc, char** argv)
 	{
 		if (WithinConeHeight(point, cone_vertex, cone_axis, closest_z, height))
 		{
-			// 第一行点
-			if (abs(point.z - closest_z) <= 0.01)
+			// 顶部点要特殊筛选
+			if (abs(point.z - closest_z) <= 0.001)
 			{
 				double radius = (point.z - cone_vertex[2]) * tan(slope);
 				double distance = std::sqrt(point.x * point.x + (point.y - cone_vertex[1]) * (point.y - cone_vertex[1]));
 
-				if (((distance - radius) ==4.01) || ((distance - radius) == 3.99))
+				if (((distance - radius) <= 4.01) && ((distance - radius) >= 3.01))
 				{
 					cloud_cone->points.push_back(point);
 				}
 			}
-			// 底面点要特殊筛选
-			else if (abs(point.z - closest_z - height) <= 0.01)
+			// 底部点要特殊筛选
+			else if (abs(point.z - closest_z - height) <= 0.001)
 			{
 				double radius = (point.z - cone_vertex[2]) * tan(slope);
 				double distance = std::sqrt(point.x * point.x + (point.y - cone_vertex[1]) * (point.y - cone_vertex[1]));
 
-				if ((distance - radius) > -4 && (distance - radius) < 0)
+				if ((distance - radius) > -3.376 && (distance - radius) <= 0)
 				{
 					cloud_cone->points.push_back(point);
 				}
@@ -134,7 +134,7 @@ int main(int argc, char** argv)
 				double radius = (point.z - cone_vertex[2]) * tan(slope);
 				double distance = std::sqrt(point.x * point.x + (point.y - cone_vertex[1]) * (point.y - cone_vertex[1]));
 
-				if (abs(distance - radius) < 4)
+				if (abs(distance - radius) <= 4.078)
 				{
 					cloud_cone->points.push_back(point);
 				}
