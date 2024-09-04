@@ -87,13 +87,13 @@ int main(int argc, char** argv)
 	auto startOp = std::chrono::high_resolution_clock::now();
 
 	// 2. 设置圆锥参数
-	Eigen::Vector3f cone_vertex(0.000, 102.000, -55.981);   // 圆锥顶点位置
+	Eigen::Vector3f cone_vertex(0.000, 101.99999999, -55.98076197);   // 圆锥顶点位置
 	Eigen::Vector3f cone_axis(0.000, 0.000, -1);			// 圆锥轴向方向
 	cone_axis.normalize();								    // 规范化轴向方向
 
 	double slope = M_PI / 6.0 * 0.5;						// 圆锥的坡度（弧度），即30度
-	double apexDistance = 30.981;							// 从顶点的距离
-	double height = 25.000;								    // 圆锥的高度
+	double apexDistance = 30.98076196;							// 从顶点的距离
+	double height = 25.00000002;								    // 圆锥的高度
 	
 	// 3. 筛选点云中的候选点
 	pcl::PointCloud<PointT>::Ptr cloud_cone(new pcl::PointCloud<PointT>);
@@ -112,7 +112,7 @@ int main(int argc, char** argv)
 				double radius = (point.z - cone_vertex[2]) * tan(slope);
 				double distance = std::sqrt(point.x * point.x + (point.y - cone_vertex[1]) * (point.y - cone_vertex[1]));
 
-				if (((distance - radius) <= 4.01) && ((distance - radius) >= 3.01))
+				if (((distance - radius) <= 4.078) && ((distance - radius) >= 3.102))  
 				{
 					cloud_cone->points.push_back(point);
 				}
@@ -120,10 +120,12 @@ int main(int argc, char** argv)
 			// 底部点要特殊筛选
 			else if (abs(point.z - closest_z - height) <= 0.001)
 			{
-				double radius = (point.z - cone_vertex[2]) * tan(slope);
-				double distance = std::sqrt(point.x * point.x + (point.y - cone_vertex[1]) * (point.y - cone_vertex[1]));
+				float radius = (point.z - cone_vertex[2]) * tan(slope);
+				float distance = std::sqrt(point.x * point.x + (point.y - cone_vertex[1]) * (point.y - cone_vertex[1]));
 
-				if ((distance - radius) > -3.376 && (distance - radius) <= 0)
+				float dis = radius - distance;
+
+				if (dis <= 3.378 && dis >= 0)					
 				{
 					cloud_cone->points.push_back(point);
 				}
