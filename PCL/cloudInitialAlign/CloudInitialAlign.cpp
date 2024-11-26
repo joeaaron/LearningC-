@@ -388,26 +388,26 @@ ComputePCA(const pointcloud::Ptr& srcCloud, const pointcloud::Ptr& dstCloud, boo
 int
 main(int argc, char** argv)
 {
-	pcl::PolygonMesh mesh;
-	if (pcl::io::loadPolygonFileSTL("model1.stl", mesh) == -1)		// model.stl Prismatic002.stl cad.stl Testcase01.stl 
-	{
-		PCL_ERROR("STL∂¡»° ß∞‹ \n");
-		return (-1);
-	}
-	pcl::PointCloud<pcl::PointXYZ>::Ptr cloudModel(new pcl::PointCloud<pcl::PointXYZ>);
-	Mesh2CloudPCL(*cloudModel, mesh);
-
-	////Load source
-	//pcl::PointCloud<pcl::PointXYZ>::Ptr cloudModel(new pcl::PointCloud<pcl::PointXYZ>);
-	//if (pcl::io::loadPCDFile<pcl::PointXYZ>("source2.pcd", *cloudModel) == -1)   // scene.pcd
+	//pcl::PolygonMesh mesh;
+	//if (pcl::io::loadPolygonFileSTL("model.stl", mesh) == -1)		// model.stl Prismatic002.stl cad.stl Testcase01.stl 
 	//{
-	//	PCL_ERROR("Couldn't read file\n");
+	//	PCL_ERROR("STL∂¡»° ß∞‹ \n");
 	//	return (-1);
 	//}
+	//pcl::PointCloud<pcl::PointXYZ>::Ptr cloudModel(new pcl::PointCloud<pcl::PointXYZ>);
+	//Mesh2CloudPCL(*cloudModel, mesh);
+
+	//Load source
+	pcl::PointCloud<pcl::PointXYZ>::Ptr cloudModel(new pcl::PointCloud<pcl::PointXYZ>);
+	if (pcl::io::loadPCDFile<pcl::PointXYZ>("target.pcd", *cloudModel) == -1)   // scene.pcd
+	{
+		PCL_ERROR("Couldn't read file\n");
+		return (-1);
+	}
 
 	//Load scene
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloudScene(new pcl::PointCloud<pcl::PointXYZ>);
-	if (pcl::io::loadPCDFile<pcl::PointXYZ>("scene2.pcd", *cloudScene) == -1)   // scene.pcd
+	if (pcl::io::loadPCDFile<pcl::PointXYZ>("src.pcd", *cloudScene) == -1)   // scene.pcd
 	{
 		PCL_ERROR("Couldn't read file\n");
 		return (-1);
@@ -448,3 +448,18 @@ main(int argc, char** argv)
 	return 0;
 }
 
+//
+//// ±£¥Êµ„‘∆
+//m_pTargetCloud->width = m_pTargetCloud->points.size();
+//m_pTargetCloud->height = 1;
+//m_pTargetCloud->is_dense = false;
+//
+//m_pSourceCloud->width = m_pSourceCloud->points.size();
+//m_pSourceCloud->height = 1;
+//m_pSourceCloud->is_dense = false;
+//
+//pcl::PCDWriter writer;
+//writer.write("Target.pcd", *m_pTargetCloud, false);
+//writer.write("Source1.pcd", *m_pSourceCloud, false);
+//
+//std::cout << "Saved successfully!";

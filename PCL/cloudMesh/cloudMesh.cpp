@@ -15,7 +15,7 @@
 #include <pcl/surface/marching_cubes_rbf.h>
 #include <pcl/io/vtk_io.h>
 #include <pcl/io/vtk_lib_io.h>
-#include <pcl/surface/ear_clipping.h> // 耳朵裁剪三角剖分算法
+#include <pcl/surface/ear_clipping.h> 
 #include <pcl/surface/vtk_smoothing/vtk_utils.h> 
 #include <pcl/filters/uniform_sampling.h>
 #include <vtkDecimatePro.h>
@@ -68,9 +68,8 @@ void GreedyTriangle(pcl::PolygonMesh& triangles,
 	gp3.setMaximumNearestNeighbors(100);	 //设置样本点最多可以搜索的邻域数目100 。
 	gp3.setMaximumSurfaceAngle(M_PI / 4);    //45 degrees，设置连接时的最大角度 eps_angle ，当某点法线相对于采样点的法线偏离角度超过该最大角度时，连接时就不考虑该点。
 	gp3.setMinimumAngle(M_PI / 5);           //10 degrees，设置三角化后三角形的最小角，参数 minimum_angle 为最小角的值。
-	gp3.setMaximumAngle(2 * M_PI / 3);	 //120 degrees，设置三角化后三角形的最大角，参数 maximum_angle 为最大角的值。
+	gp3.setMaximumAngle(2 * M_PI / 3);		 //120 degrees，设置三角化后三角形的最大角，参数 maximum_angle 为最大角的值。
 	gp3.setNormalConsistency(false);		 //设置一个标志 consistent ，来保证法线朝向一致，如果设置为 true 则会使得算法保持法线方向一致，如果为 false 算法则不会进行法线一致性检查。
-	
 	// Get result
 	gp3.setInputCloud(cloud_with_normals);	 //设置输入点云为有向点云
 	gp3.setSearchMethod(tree2);				 //设置搜索方式tree2
