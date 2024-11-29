@@ -11,13 +11,13 @@
 typedef pcl::PointXYZ PointT;
 #define ENABLE_DISPLAY 1		// 定义一个宏，用于控制显示状态
 
-constexpr int RAW_CLOUD_COLOR_R = 136;		// 深红色
-constexpr int RAW_CLOUD_COLOR_G = 52;
-constexpr int RAW_CLOUD_COLOR_B = 51;
+constexpr int RAW_CLOUD_COLOR_R = 63;		// 蓝灰色
+constexpr int RAW_CLOUD_COLOR_G = 94;
+constexpr int RAW_CLOUD_COLOR_B = 113;
 
-constexpr int REGION_CLOUD_COLOR_R = 63;	// 蓝灰色
-constexpr int REGION_CLOUD_COLOR_G = 94;
-constexpr int REGION_CLOUD_COLOR_B = 113;
+constexpr int REGION_CLOUD_COLOR_R = 136;	// 深红色
+constexpr int REGION_CLOUD_COLOR_G = 52;
+constexpr int REGION_CLOUD_COLOR_B = 51;
 
 void VisualizeRegion(pcl::PointCloud<PointT>::Ptr cloud, const std::vector<int>& regionIndices) {
 	// 创建一个新的点云对象，用于存储当前区域的点
@@ -36,12 +36,12 @@ void VisualizeRegion(pcl::PointCloud<PointT>::Ptr cloud, const std::vector<int>&
 	viewer->setBackgroundColor(0, 0, 0); // 黑色背景
 
 	// 显示原始点云
-	pcl::visualization::PointCloudColorHandlerCustom<PointT> rawColor(cloud, REGION_CLOUD_COLOR_R, REGION_CLOUD_COLOR_G, REGION_CLOUD_COLOR_B);
+	pcl::visualization::PointCloudColorHandlerCustom<PointT> rawColor(cloud, RAW_CLOUD_COLOR_R, RAW_CLOUD_COLOR_G, RAW_CLOUD_COLOR_B);
 	viewer->addPointCloud<PointT>(cloud, rawColor, "Raw cloud");
 	viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 3, "Raw cloud");
 
 	// 显示区域点云
-	pcl::visualization::PointCloudColorHandlerCustom<PointT> regionColor(regionCloud, RAW_CLOUD_COLOR_R, RAW_CLOUD_COLOR_G, RAW_CLOUD_COLOR_B);
+	pcl::visualization::PointCloudColorHandlerCustom<PointT> regionColor(regionCloud, REGION_CLOUD_COLOR_R, REGION_CLOUD_COLOR_G, REGION_CLOUD_COLOR_B);
 	viewer->addPointCloud<PointT>(regionCloud, regionColor, "Region cloud");
 	viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 3, "Region cloud");
 
