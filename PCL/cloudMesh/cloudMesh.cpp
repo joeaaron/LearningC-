@@ -292,7 +292,7 @@ main(int argc, char** argv)
 {
 	// Load input file into a PointCloud<T> with an appropriate type
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
-	if (pcl::io::loadPCDFile<pcl::PointXYZ>("project.pcd", *cloud) == -1)		// sac_plane_test.pcd | 800w.pcd | table_scene_lms400.pcd
+	if (pcl::io::loadPCDFile<pcl::PointXYZ>("table_scene_lms400.pcd", *cloud) == -1)		// sac_plane_test.pcd | 800w.pcd | table_scene_lms400.pcd
 	{
 		PCL_ERROR("点云读取失败 \n");
 		return (-1);
@@ -319,10 +319,10 @@ main(int argc, char** argv)
 	//* cloud_with_normals = cloud + normals
 
 	pcl::PolygonMesh::Ptr triangles(new pcl::PolygonMesh);
-	GreedyTriangle(*triangles, cloud, cloud_with_normals);					// 贪婪投影三角
+	//GreedyTriangle(*triangles, cloud, cloud_with_normals);					// 贪婪投影三角
 	//PossionTriangle(triangles, cloud, cloud_with_normals);				// 泊松重建
 	//GridTriangle(triangles, cloud, cloud_with_normals);					// 网格投影曲面重建
-	//MarchingCubesTriangles(triangles, cloud, cloud_with_normals);			// 移动立方体
+	MarchingCubesTriangles(*triangles, cloud, cloud_with_normals);			// 移动立方体
 	std::string output_filename = "output_mesh.stl";
 
 	// 保存为 STL 文件

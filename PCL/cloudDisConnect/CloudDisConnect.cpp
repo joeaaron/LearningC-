@@ -168,7 +168,6 @@ void GetUnSelectedRegion(std::vector<std::vector<int>>& unSelectedRegions, std::
 		std::cout << "Region " << i + 1 << " has " << regions[i].size() << " points." << std::endl;
 	}*/
 
-	//int numRegionsToSelect = 0;
 	// 灵敏度映射：通过灵敏度值决定选择的区域数量：
 	//					1）灵敏度越大，选择的区域越多
 	//				    2）灵敏度较小时，逐步减少选择的区域数，灵敏度越小选择的区域越少
