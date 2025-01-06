@@ -7,7 +7,17 @@
 #include <pcl/surface/gp3.h>
 #include <pcl/surface/poisson.h>
 #include <pcl/io/pcd_io.h>
-
+#include <vtkSmartPointer.h>
+#include <vtkPolyData.h>
+#include <vtkPolyDataMapper.h>
+#include <vtkActor.h>
+#include <vtkRenderer.h>
+#include <vtkRenderWindow.h>
+#include <vtkRenderWindowInteractor.h>
+#include <vtkPoints.h>
+#include <vtkCellArray.h>
+#include <vtkTriangle.h>
+#include <vtkProperty.h>
 using namespace vcg;
 using namespace std;
 
@@ -64,17 +74,109 @@ void SimplifyVCGMesh(MyMesh& vcg_mesh, int targetFaceNum)
 	//Decimator.DoOptimization();
 }
 
+void UpdateDisplay()
+{
+	//if (vcgMesh == nullptr || vcgMesh->vn == 0 || vcgMesh->fn == 0) return;
+
+	//auto pclMesh = ConvertVCGToPCL(vcgMesh);
+	//if (!pclMesh) return;
+
+	//// 1. 创建 VTK 点
+	//auto vtkpoints = vtkSmartPointer<vtkPoints>::New();
+	//pcl::PointCloud<pcl::PointXYZ> cloud;
+	//pcl::fromPCLPointCloud2(pclMesh->cloud, cloud);  // 从 PCL 网格提取点云
+	//for (const auto& point : cloud.points) {
+	//	vtkpoints->InsertNextPoint(point.x, point.y, point.z);
+	//}
+
+	//// 2. 创建 VTK 面
+	//auto vtkCells = vtkSmartPointer<vtkCellArray>::New();
+	//for (const auto& polygon : pclMesh->polygons) {
+	//	if (polygon.vertices.size() != 3) continue;  // 仅支持三角形面
+
+	//	auto vtktriangle = vtkSmartPointer<vtkTriangle>::New();
+	//	vtktriangle->GetPointIds()->SetId(0, polygon.vertices[0]);
+	//	vtktriangle->GetPointIds()->SetId(1, polygon.vertices[1]);
+	//	vtktriangle->GetPointIds()->SetId(2, polygon.vertices[2]);
+	//	vtkCells->InsertNextCell(vtktriangle);
+	//}
+
+	//// 3. 创建 VTK PolyData
+	//auto polyData = vtkSmartPointer<vtkPolyData>::New();
+	//polyData->SetPoints(vtkpoints);
+	//polyData->SetPolys(vtkCells);
+
+	//// 4. 创建 Mapper 和 Actor
+	//auto mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+	//mapper->SetInputData(polyData);
+
+	//auto actor = vtkSmartPointer<vtkActor>::New();
+	//actor->SetMapper(mapper);
+	//actor->GetProperty()->SetColor(0.8, 0.8, 0.8);  // 设置颜色
+
+	//// 5. 渲染管线
+	//auto renderer = vtkSmartPointer<vtkRenderer>::New();
+	//renderer->AddActor(actor);
+	//renderer->SetBackground(0.1, 0.1, 0.1);  // 设置背景色
+
+	//auto renderWindow = vtkSmartPointer<vtkRenderWindow>::New();
+	//renderWindow->AddRenderer(renderer);
+
+	//auto renderWindowInteractor = vtkSmartPointer<vtkRenderWindowInteractor>::New();
+	//renderWindowInteractor->SetRenderWindow(renderWindow);
+
+	//// 6. 显示
+	//renderWindow->Render();
+	//renderWindowInteractor->Start();
+	auto points = vtkSmartPointer<vtkPoints>::New();
+	points->InsertNextPoint(0.0, 0.0, 0.0);
+	points->InsertNextPoint(1.0, 0.0, 0.0);
+	points->InsertNextPoint(0.0, 1.0, 0.0);
+
+	auto triangle = vtkSmartPointer<vtkTriangle>::New();
+	triangle->GetPointIds()->SetId(0, 0);
+	triangle->GetPointIds()->SetId(1, 1);
+	triangle->GetPointIds()->SetId(2, 2);
+
+	auto cells = vtkSmartPointer<vtkCellArray>::New();
+	cells->InsertNextCell(triangle);
+
+	auto polyData = vtkSmartPointer<vtkPolyData>::New();
+	polyData->SetPoints(points);
+	polyData->SetPolys(cells);
+
+	auto mapper = vtkSmartPointer<vtkPolyDataMapper>::New();
+	mapper->SetInputData(polyData);
+
+	auto actor = vtkSmartPointer<vtkActor>::New();
+	actor->SetMapper(mapper);
+
+	auto renderer = vtkSmartPointer<vtkRenderer>::New();
+	renderer->AddActor(actor);
+	renderer->SetBackground(0.1, 0.1, 0.1);
+
+	auto renderWindow = vtkSmartPointer<vtkRenderWindow>::New();
+	renderWindow->AddRenderer(renderer);
+
+	auto renderWindowInteractor = vtkSmartPointer<vtkRenderWindowInteractor>::New();
+	renderWindowInteractor->SetRenderWindow(renderWindow);
+
+	renderWindow->Render();
+	renderWindowInteractor->Start();
+}
+
 int main(int argc, char** argv) 
 {
 	int target_face_num = 5000;
 	pcl::PolygonMesh mesh;
 
 	// 转换 PCL 网格为 VCG 网格
-	MyMesh vcg_mesh;
-	PCL2VCG(mesh, vcg_mesh);
+	/*MyMesh vcg_mesh;
+	PCL2VCG(mesh, vcg_mesh);*/
+	UpdateDisplay();
 
 	// 简化 VCG 网格
-	SimplifyVCGMesh(vcg_mesh, target_face_num);
+	//SimplifyVCGMesh(vcg_mesh, target_face_num);
 
 	//// 保存简化后的 VCG 网格
 	//if (!vcg::tri::io::Exporter<MyMesh>::Save(vcg_mesh, output_file.c_str())) {

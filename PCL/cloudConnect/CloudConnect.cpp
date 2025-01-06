@@ -385,7 +385,7 @@ int main()
 {
 	//----------------------读取点云---------------------
 	pcl::PointCloud<PointT>::Ptr pCloud(new pcl::PointCloud<PointT>);
-	if (pcl::io::loadPCDFile<PointT>("2.pcd", *pCloud) == -1)
+	if (pcl::io::loadPCDFile<PointT>("gyb.pcd", *pCloud) == -1)
 	{
 		PCL_ERROR("Cloudn't read file!");
 		return -1;
@@ -393,7 +393,8 @@ int main()
 
 	//----------------------参数设置---------------------
 	std::vector<std::vector<int>> regions;
-	RegionGrowing(regions, pCloud, 2);		// 区域生长法得到不同的区域
+	//RegionGrowing(regions, pCloud, 2);		// 区域生长法得到不同的区域
+	RegionGrowing(pCloud, 2);
 
 	//PointT selectedPoint = PointT(-68.786301, -44.614494, 179.142242);
 	PointT selectedPoint = PointT(-43.730217, -75.069366, 195.085403);

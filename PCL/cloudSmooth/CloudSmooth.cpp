@@ -311,6 +311,30 @@ static int ReadFile(std::vector<Eigen::Vector3d>& vNoramls, std::string filePath
 
 }
 
+//static void CalcNormalVariance(const std::vector<Eigen::Vector3d>& points)
+//{
+//	// 计算法向量的均值
+//	Eigen::Vector3d mean(0, 0, 0);
+//	for (const auto& point : points) {
+//		mean += point;
+//	}
+//	mean /= points.size();
+//
+//	std::cout << "Mean of the normal vectors: " << mean.transpose() << std::endl;
+//
+//	// 计算法向量的方差
+//	//Eigen::Vector3d variance(0, 0, 0);
+//	double variance = 0.0;
+//	for (const auto& point : points) {
+//		double diff = (point - mean).norm();
+//		//variance += diff.cwiseProduct(diff);
+//		variance += diff * diff;
+//	}
+//
+//	variance /= points.size();
+//	std::cout << "Standard deviation of the normal vectors: " << std::sqrt(variance) << std::endl;
+//}
+
 static void CalcNormalVariance(const std::vector<Eigen::Vector3d>& points)
 {
 	// 计算法向量的均值
@@ -323,22 +347,40 @@ static void CalcNormalVariance(const std::vector<Eigen::Vector3d>& points)
 	std::cout << "Mean of the normal vectors: " << mean.transpose() << std::endl;
 
 	// 计算法向量的方差
-	//Eigen::Vector3d variance(0, 0, 0);
 	double variance = 0.0;
-	for (const auto& point : points) {
+	std::vector<double> angle_differences;  // 用来存储角度差异
+	for (size_t i = 0; i < points.size(); ++i) {
+		const Eigen::Vector3d& point = points[i];
 		double diff = (point - mean).norm();
-		//variance += diff.cwiseProduct(diff);
 		variance += diff * diff;
+
+		// 计算相邻法向量之间的夹角差异
+		if (i > 0) {
+			const Eigen::Vector3d& prev_point = points[i - 1];
+			// 计算夹角
+			double cos_angle = point.dot(prev_point) / (point.norm() * prev_point.norm());
+			// 限制cos值范围在[-1, 1]之间，避免数值误差
+			cos_angle = std::clamp(cos_angle, -1.0, 1.0);
+			double angle = std::acos(cos_angle);  // 计算夹角（弧度）
+			angle_differences.push_back(angle);
+		}
 	}
 
+	// 法向量方差（标准差）
 	variance /= points.size();
+	double normal_standard_deviation = std::sqrt(variance);
 
-	//std::cout << "Variance of the normal vectors: " << variance.transpose() << std::endl;
+	// 计算角度差异的标准差
+	double angle_variance = 0.0;
+	for (double angle : angle_differences) {
+		angle_variance += angle * angle;
+	}
+	angle_variance /= angle_differences.size();
+	double angle_standard_deviation = std::sqrt(angle_variance);
 
-	// 计算法向量的标准差
-	//Eigen::Vector3d std_dev = variance.cwiseSqrt();
-
-	std::cout << "Standard deviation of the normal vectors: " << std::sqrt(variance) << std::endl;
+	// 输出法向量的标准差和法向量夹角的标准差
+	std::cout << "Standard Deviation of the normal vectors: " << normal_standard_deviation << std::endl;
+	std::cout << "Standard Deviation of the normal vector angles: " << angle_standard_deviation << " radians" << std::endl;
 }
 
 static void ComputeNormalVarianceAndAngle(pcl::PointCloud<pcl::PointNormal>::Ptr& cloud_with_normals)
@@ -401,14 +443,14 @@ int main()
 {
 	
 	//----------------------计算思看扫描点云的法向量一致性---------------------
-	std::string filePath = "E:\\Repository\\Github\\LearningC-\\resource\\isolate\\3.txt";
+	std::string filePath = "E:\\Repository\\Github\\LearningC-\\resource\\isolate\\1.txt";
 	std::vector<Eigen::Vector3d> vNoramls;
 	ReadFile(vNoramls, filePath);
 	CalcNormalVariance(vNoramls);
 	
 	//----------------------读取点云---------------------
 	pcl::PointCloud<PointT>::Ptr pCloud(new pcl::PointCloud<PointT>);
-	if (pcl::io::loadPCDFile<PointT>("3.pcd", *pCloud) == -1)   //statue2.pcd
+	if (pcl::io::loadPCDFile<PointT>("2.pcd", *pCloud) == -1)   //statue2.pcd
 	{
 		PCL_ERROR("Cloudn't read file!");
 		return -1;

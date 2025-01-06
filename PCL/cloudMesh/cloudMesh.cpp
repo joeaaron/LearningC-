@@ -401,23 +401,23 @@ main(int argc, char** argv)
 	//std::cout << "简化后的面片数：" << polygonNums << std::endl;
 
 //#if ENABLE_DISPLAY
-//	//----------------------------------结果可视化-----------------------------------
-//	viewer->setWindowName(u8"简化后的面片");
-//	int v1(0), v2(0);
-//	viewer->createViewPort(0, 0, 0.5, 1, v1);
-//	viewer->createViewPort(0.5, 0, 1, 1, v2);
-//	viewer->setBackgroundColor(0, 0, 0, v1);
-//	viewer->setBackgroundColor(0.3, 0.3, 0.3, v2);
-//	viewer->addPointCloud<pcl::PointXYZ>(cloud, "cloud", v1);	  // 可视化点云
-//	viewer->addPolygonMesh(simplifiedMesh, "my", v2);             // 可视化模型重建结果
-//	viewer->setRepresentationToSurfaceForAllActors();             // 网格模型以线框图模式显示
-//	//viewer->initCameraParameters();
-//	viewer->initCameraParameters();
-//	viewer->spin();
-//	while (!viewer->wasStopped())
-//	{
-//		viewer->spinOnce(100);
-//	}
+	////----------------------------------结果可视化-----------------------------------
+	//viewer->setWindowName(u8"简化后的面片");
+	//int v1(0), v2(0);
+	//viewer->createViewPort(0, 0, 0.5, 1, v1);
+	//viewer->createViewPort(0.5, 0, 1, 1, v2);
+	//viewer->setBackgroundColor(0, 0, 0, v1);
+	//viewer->setBackgroundColor(0.3, 0.3, 0.3, v2);
+	//viewer->addPointCloud<pcl::PointXYZ>(cloud, "cloud", v1);	  // 可视化点云
+	//viewer->addPolygonMesh(simplifiedMesh, "my", v2);             // 可视化模型重建结果
+	//viewer->setRepresentationToSurfaceForAllActors();             // 网格模型以线框图模式显示
+	////viewer->initCameraParameters();
+	//viewer->initCameraParameters();
+	//viewer->spin();
+	//while (!viewer->wasStopped())
+	//{
+	//	viewer->spinOnce(100);
+	//}
 //#endif
 //
 //	return (0);
